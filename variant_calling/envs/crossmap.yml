@@ -1,0 +1,8 @@
+name: crossmap
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.9
+  - crossmap=0.7.3
+  - pysam

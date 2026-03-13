@@ -1,0 +1,9 @@
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=3.10.19
+  - seaborn=0.13.2
+  - pip=26.0.1
+  - pip:
+    - octopusv==0.3.0

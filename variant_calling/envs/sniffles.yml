@@ -1,0 +1,8 @@
+name: sniffles
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - sniffles=2.0.7
+  - bcftools=1.5
+  - python=3.14.2
