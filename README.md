@@ -14,13 +14,13 @@ The pipeline is implemented using Snakemake and sbatch scripts.
 
 ```
 .
-|__ align.smk 			# Alignment workflow
-|__ alignqc.smk			# Alignment QC workflow
-|__ config.yml			# General config containing references and parameters
-|__ alignqc_env.yml 		# Conda environment for QC
-|__ run_snakemake_align.sh 	# SBATCH script to run the alignment
-|__ run_snakemake_alignqc.sh 	# SBATCH script to run the alignemnt QC
-|__ variant_calling/ 		# Variant calling module
+|__ align.smk                       # Alignment workflow
+|__ alignqc.smk	                    # Alignment QC workflow
+|__ config.yml                      # General config containing references and parameters
+|__ alignqc_env.yml                 # Conda environment for QC
+|__ run_snakemake_align.sh          # SBATCH script to run the alignment
+|__ run_snakemake_alignqc.sh        # SBATCH script to run the alignemnt QC
+|__ variant_calling/                # Variant calling module
 |__ README.md
 ```
 
