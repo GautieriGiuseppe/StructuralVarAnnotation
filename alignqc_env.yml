@@ -1,0 +1,13 @@
+name: alignqc_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - snakemake-minimal=7.32.4  # Stable v7 is best for cluster/slurm integration
+  - alfred=0.2.7              # Specific stable bioconda release
+  - mosdepth=0.3.3
+  - pandas
+  - pyyaml
+  - pulp=2.7.0                # Pinning pulp prevents common snakemake solver hangs
