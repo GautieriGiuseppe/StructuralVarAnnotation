@@ -10,9 +10,9 @@ The workflow is divided in three modules:
 - Alignment Quality Control
 - Variant Calling
 
-It makes usage of snakemake and sbatch scripts.
+The pipeline is implemented using Snakemake and sbatch scripts.
 
-'''
+```
 .
 |__ align.smk 			# Alignment workflow
 |__ alignqc.smk			# Alignment QC workflow
@@ -22,7 +22,8 @@ It makes usage of snakemake and sbatch scripts.
 |__ run_snakemake_alignqc.sh 	# SBATCH script to run the alignemnt QC
 |__ variant_calling/ 		# Variant calling module
 |__ README.md
-'''
+```
+
 
 ## Workflow Description
 
