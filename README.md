@@ -47,3 +47,10 @@ These are the only requirements since the environments and tools used are built 
 ## Usage
 
 Specify the input paths of the files through a samples tsv file before running the workflow.
+
+samples tsv file example
+
+sample_id	ubam	summary	fastq	batch_id
+A_1	/path/to/A_1.ubam	/path/to/A_1_sequencing_summary.tsv.gz	/path/to/A_1.fastq.gz	A
+A_2	/path/to/A_2.ubam	/path/to/A_2_sequencing_summary.tsv.gz	/path/to/A_2.fastq.gz	A
+A_3	/path/tp/A_3.ubam	/path/to/A_3_sequencing_summary.tsv.gz	/path/to/A_3.fastq.gz	A
