@@ -1,45 +1,48 @@
 import os
 
 # ==============================================================================
-#  PARSING CONFIG & METADATA
+# PARSING CONFIG & METADATA
 # ==============================================================================
-samples_file = config['samples']
+samples_file = config["samples"]
 VALID_PAIRS = []
 
-with open(samples_file, 'r') as f:
-    header = f.readline().strip().split('\t')
-    sample_idx = header.index('sample_id')
-    batch_idx = header.index('batch_id')
+with open(samples_file, "r") as f:
+    header = f.readline().strip().split("\t")
+    sample_idx = header.index("sample_id")
+    batch_idx = header.index("batch_id")
+
     for line in f:
         if line.strip():
-            fields = line.strip().split('\t')
+            fields = line.strip().split("\t")
             VALID_PAIRS.append((fields[batch_idx], fields[sample_idx]))
 
 # ==============================================================================
-#  INCLUDING THE TWO SMK FILES
+# INCLUDING RULE FILES
 # ==============================================================================
 include: "sample_variant_calling.smk"
 include: "cohort_merge.smk"
 
 # ==============================================================================
-#  RULE ALL
+# RULE ALL
 # ==============================================================================
-
 rule all:
     input:
-        # 1. Final Matrix
-        config['output'] + '/NP057/cohort_results/CHM13_final_genotyped_matrix.vcf.gz',
-
-        # 2. The Union 
-        [config['output'] + f"/{b}/{s}/03.variant_calling/consolidated/{s}_chm13_consolidated-union.svcf" 
-         for b, s in VALID_PAIRS],
-        [config['output'] + f"/{b}/{s}/03.variant_calling/consolidated/{s}_chm13_consolidated-union.vcf" 
-         for b, s in VALID_PAIRS],
-
-        # 3. The Intersection 
-        [config['output'] + f"/{b}/{s}/03.variant_calling/consolidated/{s}_chm13_merged-intersect.svcf" 
-         for b, s in VALID_PAIRS],
-        
-        # 4. UpSet Plots
-        [config['output'] + f"/{b}/{s}/03.variant_calling/consolidated/{s}_upset_plot.png" 
-         for b, s in VALID_PAIRS]
+        config["output"] + "/cohort_results/CHM13_final_cohort_survivor.vcf.gz",
+        expand(
+            config["output"] + "/cohort_results/{cohort}_genotyped_matrix.vcf.gz",
+            cohort=[
+                "CHM13_final_cohort_survivor",
+                "CHM13_tier1_supported",
+                "CHM13_genotype_input"
+            ]
+        ),
+        expand(
+            config["output"] + "/{batch}/{sample}/04.force_calling/{sample}_{cohort}_genotypability.txt",
+            batch=[b for b, s in VALID_PAIRS],
+            sample=[s for b, s in VALID_PAIRS],
+            cohort=[
+                "CHM13_final_cohort_survivor",
+                "CHM13_tier1_supported",
+                "CHM13_genotype_input"
+            ]
+        )
