@@ -35,7 +35,7 @@ rule delly_grch38:
     resources:
         mem_mb = config['mm'],
         time   = config['ht']
-    shell: "./delly_static lr -y ont -g {input.reference} {input.sample} -o {output}"
+    shell: "delly lr -y ont -g {input.reference} {input.sample} -o {output}"
 
 rule delly_chm13:
     input:  reference = config['reference']['chm13'],
@@ -46,7 +46,7 @@ rule delly_chm13:
     resources:
         mem_mb = config['mm'],
         time   = config['ht']
-    shell: "./delly_static lr -y ont -g {input.reference} {input.sample} -o {output}"
+    shell: "delly lr -y ont -g {input.reference} {input.sample} -o {output}"
 
 # --- CUTESV ---
 rule cuteSV_grch38:
