@@ -3,6 +3,7 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
+  - delly=1.2.9
   - bcftools=1.17
-  - htslib=1.17
+  - htslib=1.21
   - libdeflate
