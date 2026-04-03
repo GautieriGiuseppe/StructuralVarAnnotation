@@ -83,3 +83,4 @@ rule needlr_grch38:
 ```bash
 singularity pull needlr.sif docker://gautierigiuseppe/needlr:3.5
 ```
+
