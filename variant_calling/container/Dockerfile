@@ -1,26 +1,33 @@
-FROM mambaorg/micromamba:1.5.8
+FROM mambaorg/micromamba:1.5.10
 
-# Set environment name
-ENV MAMBA_DOCKERFILE_ACTIVATE=1
+USER root
 
-# Copy environment file
-COPY environment.yml /tmp/environment.yml
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    procps \
+    findutils \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN micromamba install -y -n base -f /tmp/environment.yml && \
-    micromamba clean --all --yes
+ENV CONDA_SUBDIR=linux-64
 
-# Set working directory
+RUN micromamba install -y -n base -c conda-forge -c bioconda \
+    python=3.11 \
+    truvari \
+    bedtools \
+    bcftools \
+    htslib \
+    tabix \
+    pandas \
+    numpy \
+    && micromamba clean --all --yes
+
 WORKDIR /opt
-
-# Copy needLR code
 COPY needLR_v3.5_local /opt/needLR_v3.5_local
 
-# Set working directory inside needLR
 WORKDIR /opt/needLR_v3.5_local
-
-# Make scripts executable
 RUN chmod +x needLR_v3.5_*.sh
 
-# Default shell
-SHELL ["/bin/bash", "-c"]
+ENV PATH=/opt/conda/bin:$PATH
+
+CMD ["/bin/bash"]
