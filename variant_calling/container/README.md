@@ -43,6 +43,7 @@ cd /opt/needLR_v3.5_local && \
   -a /path/to/samples.txt \
   -d 8
 "
+```
 
 ### Snakemake integration
 
