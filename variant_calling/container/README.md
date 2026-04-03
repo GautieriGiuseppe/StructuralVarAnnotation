@@ -77,3 +77,9 @@ rule needlr_grch38:
         "
         """
 ```
+
+## Pull container directly
+
+```bash
+singularity pull needlr.sif docker://gautierigiuseppe/needlr:3.5
+```
