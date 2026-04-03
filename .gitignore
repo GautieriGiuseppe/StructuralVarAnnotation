@@ -1,0 +1,33 @@
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Snakemake
+.snakemake/
+logs/
+
+# Large generated outputs
+variant_calling/container/needLR_v3.5_local/needLR_output/
+variant_calling/container/needLR_v3.5_local/EXAMPLE/*_RESULTS*
+variant_calling/container/needLR_v3.5_local/**/*.log
+
+# Large backend/reference resources that should not live in git
+variant_calling/container/needLR_v3.5_local/backend_files/bed_files/
+variant_calling/container/needLR_v3.5_local/backend_files/*.vcf
+variant_calling/container/needLR_v3.5_local/backend_files/*.vcf.gz
+variant_calling/container/needLR_v3.5_local/backend_files/*.tbi
+variant_calling/container/needLR_v3.5_local/backend_files/*.bed
+variant_calling/container/needLR_v3.5_local/backend_files/*.bed.gz
+
+variant_calling/container/needLR_v3.5_local/backend_files/
+variant_calling/container/needLR_v3.5_local/EXAMPLE/
+variant_calling/container/needLR_v3.5_local/needLR_output/
+
+variant_calling/container/needLR_v3.5_local/**/*.log
+variant_calling/container/needLR_v3.5_local/**/*.tmp
