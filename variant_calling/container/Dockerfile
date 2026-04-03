@@ -20,6 +20,7 @@ RUN micromamba install -y -n base -c conda-forge -c bioconda \
     tabix \
     pandas \
     numpy \
+    samtools \
     && micromamba clean --all --yes
 
 WORKDIR /opt
