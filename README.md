@@ -102,6 +102,8 @@ Includes:
     - Confirmed_by_CHM13
     - GRCh38_only
 
+The needLR tool is integrated in the annotation workflow, but is also available as docker container in variant_calling/container.
+
 ## Requirements
 
 - Conda/Mamba
