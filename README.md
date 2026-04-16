@@ -69,6 +69,39 @@ Structural variants are detected using:
 
 Per-sample calls are filtered and normalized, then merged at cohort level.
 
+### Benchmarking Workflow
+
+Run:
+```bash
+sbatch variant_calling/run_snakemake_benchmarking.sh
+```
+
+Includes:
+
+- Per-sample SV calling
+- Cohort merging (CHM13)
+- tool/reference comparison
+- evaluation using Truvari
+
+### Annotation Workflow
+
+Run:
+```bash
+sbatch variant_calling/run_snakemake_annotation.sh
+```
+
+Includes:
+
+- GRCh38 cohort construction
+- Force genotyping across samples
+- Structural variant annotation with needLR v3.5
+- Cross-reference validation:
+  - CHM13 lifted variants (CrossMap)
+  - Variants are matched using Truvari
+  - GRCh38 variants are labeled as:
+    - Confirmed_by_CHM13
+    - GRCh38_only
+
 ## Requirements
 
 - Conda/Mamba
