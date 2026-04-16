@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=snakemake_variant_calling
+#SBATCH --job-name=snakemake_benchmark_variant_calling
 #SBATCH --mail-type=END
 #SBATCH --mail-user=giuseppe.gautieri@external.fht.org
 #SBATCH --partition=cpuq
@@ -18,19 +18,16 @@ conda activate alignqc_env
 # 2. Create a logs directory if it doesn't exist
 mkdir -p logs
 
-snakemake --snakefile variant_calling.smk --configfile config.yml --cleanup-metadata /group/dominguez/shared_notebooks/Immune_variation/mapping/NP057/
-
 # 3. Unlock the directory
-snakemake --snakefile variant_calling.smk --configfile config.yml --unlock
+snakemake --snakefile benchmark_master.smk --configfile config.yml --unlock
 
 # 4. Run Snakemake
 
 snakemake \
-     --snakefile variant_calling.smk \
+     --snakefile benchmark_master.smk \
      --configfile config.yml \
      --cores 50 \
      --jobs 20 \
-     --forceall \
      --use-conda \
      --conda-frontend mamba \
      --use-singularity \
@@ -43,4 +40,5 @@ snakemake \
                 --time={resources.time} \
                 --cpus-per-task={threads} \
                 --mem={resources.mem_mb}M \
-                --output=logs/{rule}_%j.log"
+                --output=logs/{rule}_%j.log" \
+     
