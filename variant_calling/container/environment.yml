@@ -1,0 +1,15 @@
+name: needlr_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  - bcftools
+  - htslib
+  - tabix
+  - bedtools
+  - samtools
+  - truvari
+  - pandas
+  - numpy
