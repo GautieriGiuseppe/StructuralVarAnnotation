@@ -8,13 +8,7 @@ The two workflows are distinct but share some of the execution.
 
 ### Benchmarking (CHM13-centered)
 
-In this workflow all the variants detected by tools on both reference are collected using merging and the Grch38 are lifted on chm13 in order to evaluate them.
-
-Run:
-```bash
-sbatch run_snakemake_benchmarking.sh
-```
-
+In this workflow all the variants detected by tools on both reference are collected using merging and the Grch38 are lifted on chm13 in order to evaluate them
 ### Annotation (Grch38-centered)
 
 In this workflow the variants are collected on Grch38 in order to annotate them using the needLR tool. 
