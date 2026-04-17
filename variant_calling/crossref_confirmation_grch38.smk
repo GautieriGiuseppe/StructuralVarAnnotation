@@ -3,16 +3,6 @@ import os
 OUTDIR = config["output"]
 
 # ------------------------------------------------------------------------------
-# Convenience target
-# ------------------------------------------------------------------------------
-rule all_grch38_confirmation:
-    input:
-        f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz",
-        f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz.tbi",
-        f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/summary.txt",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv"
-
-# ------------------------------------------------------------------------------
 # Lift CHM13 cohort VCF to GRCh38
 # ------------------------------------------------------------------------------
 rule crossmap_chm13_cohort_to_grch38:
@@ -41,6 +31,51 @@ rule crossmap_chm13_cohort_to_grch38:
         """
 
 # ------------------------------------------------------------------------------
+# Filter BND variants in both callsets
+# ------------------------------------------------------------------------------
+rule filter_grch38_cohort_for_confirmation:
+    input:
+        vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
+        tbi=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi"
+    output:
+        vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.canonical.vcf.gz",
+        tbi=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.canonical.vcf.gz.tbi"
+    conda:
+        "envs/crossmap_truvari.yml"
+    threads: 2
+    resources:
+        mem_mb=config["mm"],
+        time=config["ht"]
+    shell:
+        r"""
+        bcftools view \
+            -i 'INFO/SVTYPE="DEL" || INFO/SVTYPE="INS" || INFO/SVTYPE="DUP" || INFO/SVTYPE="INV"' \
+            {input.vcf} -O z -o {output.vcf}
+        tabix -f -p vcf {output.vcf}
+        """
+
+rule filter_lifted_chm13_for_confirmation:
+    input:
+        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz",
+        tbi=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz.tbi"
+    output:
+        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.canonical.vcf.gz",
+        tbi=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.canonical.vcf.gz.tbi"
+    conda:
+        "envs/crossmap_truvari.yml"
+    threads: 2
+    resources:
+        mem_mb=config["mm"],
+        time=config["ht"]
+    shell:
+        r"""
+        bcftools view \
+            -i 'INFO/SVTYPE="DEL" || INFO/SVTYPE="INS" || INFO/SVTYPE="DUP" || INFO/SVTYPE="INV"' \
+            {input.vcf} -O z -o {output.vcf}
+        tabix -f -p vcf {output.vcf}
+        """
+
+# ------------------------------------------------------------------------------
 # Sort + bgzip + index lifted VCF
 # ------------------------------------------------------------------------------
 rule sort_index_chm13_lifted_grch38:
@@ -57,23 +92,29 @@ rule sort_index_chm13_lifted_grch38:
         time=config["ht"]
     shell:
         r"""
-        bcftools sort {input.vcf} -O z -o {output.vcf}
+        tmp_clean={OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.cleaned.vcf
+
+        awk 'BEGIN{{FS=OFS="\t"}}
+             /^#/ {{print; next}}
+             ($2 ~ /^[0-9]+$/) && ($2 > 0) {{print}}
+        ' {input.vcf} > $tmp_clean
+
+        bcftools sort $tmp_clean -O z -o {output.vcf}
         tabix -f -p vcf {output.vcf}
+
+        rm -f $tmp_clean
         """
 
 # ------------------------------------------------------------------------------
 # Compare native GRCh38 vs lifted CHM13 using truvari
-#
-# base = native GRCh38 set
-# comp = CHM13 lifted to GRCh38
 # ------------------------------------------------------------------------------
 rule truvari_match_grch38_vs_chm13lifted:
     input:
-        base=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
-        comp=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz",
+        base=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.canonical.vcf.gz",
+        comp=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.canonical.vcf.gz",
         ref=config["reference"]["grch38"]
     output:
-        summary=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/summary.txt",
+        summary=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/summary.json",
         tp_base=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/tp-base.vcf.gz",
         tp_comp=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/tp-comp.vcf.gz",
         fn=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/fn.vcf.gz",
@@ -98,14 +139,11 @@ rule truvari_match_grch38_vs_chm13lifted:
             --pctsize 0 \
             --pctovl 0 \
             -r 500 \
-            --multimatch \
+            --pick multi
         """
 
 # ------------------------------------------------------------------------------
 # Build confirmation table for native GRCh38 variants
-#
-# tp-base = GRCh38 variants matched by lifted CHM13
-# fn      = GRCh38 variants not matched by lifted CHM13
 # ------------------------------------------------------------------------------
 rule build_grch38_confirmation_table:
     input:
