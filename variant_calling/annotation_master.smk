@@ -22,26 +22,23 @@ include: "force_genotype_grch38.smk"
 include: "needLR_grch38.smk"
 include: "crossref_confirmation_grch38.smk"
 
-rule all_grch38:
+rule all:
     input:
+        # GRCh38 cohort
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
         f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi"
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
 
-rule all_grch38_annotation:
-    input:
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
+        # needLR
         os.path.join(
             NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_v3.5_cohort",
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_v3.5_cohort_RESULTS.txt"
-        )
+            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_v3.5_cohort"
+        ),
 
-rule all_grch38_crossref:
-    input:
+        # cross-reference confirmation
         f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz",
         f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz.tbi",
-        f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/summary.txt",
+        f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/summary.json",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv"
