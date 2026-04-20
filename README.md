@@ -102,7 +102,7 @@ Includes:
     - Confirmed_by_CHM13
     - GRCh38_only
 
-The needLR tool is integrated in the annotation workflow, but is also available as docker container in variant_calling/container.
+The needLR tool is integrated in the annotation workflow with the most recent version version 4.0, but is also available as docker container of the v3.5 in variant_calling/container.
 
 ## Requirements
 
