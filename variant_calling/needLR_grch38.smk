@@ -5,16 +5,6 @@ NEEDLR_SCRIPT = config["needlr"]["cohort_script"]
 NEEDLR_OUTDIR = os.path.join(OUTDIR, config["needlr"].get("outdir", "needLR_output"))
 
 # ------------------------------------------------------------------------------
-# target
-# ------------------------------------------------------------------------------
-rule all_grch38_needlr:
-    input:
-        os.path.join(
-            NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_v3.5_cohort"
-        )
-
-# ------------------------------------------------------------------------------
 # Prepare a clean, sorted, indexed VCF for needLR
 # ------------------------------------------------------------------------------
 rule grch38_needlr_prepare_input:
@@ -66,10 +56,10 @@ rule grch38_needlr:
     output:
         outdir=directory(os.path.join(
             NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_v3.5_cohort"
+            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
         ))
     conda:
-        "envs/truvari_env.yml"
+        "envs/needlr_env.yml"
     threads: config["hc"]
     resources:
         mem_mb=config["hm"],
@@ -79,5 +69,5 @@ rule grch38_needlr:
         rm -rf {output.outdir}
         mkdir -p {output.outdir}
 
-        bash {NEEDLR_SCRIPT} {input.vcf} {output.outdir}
+        needLR annotate -Q {input.vcf} -O {output.outdir} --all
         """
