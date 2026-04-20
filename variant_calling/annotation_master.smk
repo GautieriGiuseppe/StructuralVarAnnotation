@@ -34,7 +34,7 @@ rule all:
         # needLR
         os.path.join(
             NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_v3.5_cohort"
+            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
         ),
 
         # cross-reference confirmation
