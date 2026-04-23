@@ -19,12 +19,12 @@ conda activate alignqc_env
 mkdir -p logs
 
 # 3. Unlock the directory
-snakemake --snakefile benchmark_master.smk --configfile config.yml --unlock
+snakemake --snakefile evaluation_master.smk --configfile config.yml --unlock
 
 # 4. Run Snakemake
 
 snakemake \
-     --snakefile benchmark_master.smk \
+     --snakefile evaluation_master.smk \
      --configfile config.yml \
      --cores 50 \
      --jobs 20 \
