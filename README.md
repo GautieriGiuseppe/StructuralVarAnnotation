@@ -29,7 +29,7 @@ Repository structure:
 |__ run_snakemake_alignqc.sh            # SBATCH script to run the alignemnt QC
 |
 |__ variant_calling/                    # Variant calling module
-|  |--evaluation_master.smk              # CHM13 benchmarking workflow
+|  |--evaluation_master.smk             # CHM13 benchmarking workflow
 |  |--annotation_master.smk             # GRCh38 annotation workflow
 |  |--sample_variant_calling.smk        # Shared per-sample SV calling
 |  |--cohort_merge.smk                  # CHM13 cohort merging
