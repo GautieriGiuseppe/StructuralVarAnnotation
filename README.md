@@ -12,7 +12,7 @@ The workflow is divided in three modules:
 
 The varian calling module is further split into two independent workflows:
 
-- Benchmarking (CHM13-centered)
+- Evaluation (CHM13-centered)
 - Annotation (GRCh38-centered)
 
 The pipeline is implemented using Snakemake and designed for scalable execution via SLURM (sbatch).
@@ -29,15 +29,15 @@ Repository structure:
 |__ run_snakemake_alignqc.sh            # SBATCH script to run the alignemnt QC
 |
 |__ variant_calling/                    # Variant calling module
-|  |--benchmark_master.smk              # CHM13 benchmarking workflow
+|  |--evaluation_master.smk              # CHM13 benchmarking workflow
 |  |--annotation_master.smk             # GRCh38 annotation workflow
 |  |--sample_variant_calling.smk        # Shared per-sample SV calling
 |  |--cohort_merge.smk                  # CHM13 cohort merging
 |  |--cohort_merge_grch38.smk           # GRCh38 cohort merging
 |  |--needLR_grch38.smk                 # needLR annotation
 |  |--crossref_confirmation_grch38smk   # CHM13 -> GRCh38 confirmation
-|  |--run_snakemake_benchmarking.sh
-|  |--run_snakemake_annotation.sh
+|  |--run_snakemake_evaluation.sh       # SBATCH script to run the tool-reference evaluation
+|  |--run_snakemake_annotation.sh       # SBATCH script to run the annotation pipeline
 |  |_envs/                              # Conda environments
 |
 |__ README.md
@@ -57,7 +57,7 @@ This dual reference allows:
 
 - Improved variant discovery
 - Cross-reference comparison
-- Benchmarking across genome builds
+- Evaluation across genome builds
 
 ### Variant Calling
 
@@ -73,7 +73,7 @@ Per-sample calls are filtered and normalized, then merged at cohort level.
 
 Run:
 ```bash
-sbatch variant_calling/run_snakemake_benchmarking.sh
+sbatch variant_calling/run_snakemake_evaluation.sh
 ```
 
 Includes:
@@ -108,6 +108,7 @@ The needLR tool is integrated in the annotation workflow with the most recent ve
 
 - Conda/Mamba
 - Snakemake >= 7.32.4
+- References files to customize in config
 
 These are the only requirements since the environments and tools used are built automatically when needed.
 
