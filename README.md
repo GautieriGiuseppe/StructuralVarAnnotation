@@ -4,6 +4,8 @@ Snakemake-based pipeline for alignment and variant calling, designed for HPC exe
 
 ## Overview
 
+![Pipeline overview](pipeline_overview.png)
+
 The workflow is divided in three modules:
 
 - Alignment
