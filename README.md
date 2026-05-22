@@ -1,3 +1,4 @@
+
 # ImmuneVariantCalling
 
 Snakemake-based pipeline for alignment and variant calling, designed for HPC execution.
@@ -10,12 +11,7 @@ The workflow is divided in three modules:
 
 - Alignment
 - Alignment Quality Control
-- Variant Calling
-
-The varian calling module is further split into two independent workflows:
-
-- Evaluation (CHM13-centered)
-- Annotation (GRCh38-centered)
+- Structural Variant Calling and Annotation
 
 The pipeline is implemented using Snakemake and designed for scalable execution via SLURM (sbatch).
 
@@ -23,24 +19,21 @@ Repository structure:
 
 ```
 .
-|__ align.smk                           # Alignment workflow
-|__ alignqc.smk	                        # Alignment QC workflow
-|__ config.yml                          # General config containing references and parameters
-|__ alignqc_env.yml                     # Conda environment for QC
-|__ run_snakemake_align.sh              # SBATCH script to run the alignment
-|__ run_snakemake_alignqc.sh            # SBATCH script to run the alignemnt QC
+|-- align.smk                           # Alignment workflow
+|-- alignqc.smk	                        # Alignment QC workflow
+|-- config.yml                          # General config containing references and parameters
+|-- alignqc_env.yml                     # Conda environment for QC
+|-- run_snakemake_align.sh              # SBATCH script to run the alignment
+|-- run_snakemake_alignqc.sh            # SBATCH script to run the alignemnt QC
 |
-|__ variant_calling/                    # Variant calling module
-|  |--evaluation_master.smk             # CHM13 benchmarking workflow
+|-- variant_calling/                    # Variant calling module
 |  |--annotation_master.smk             # GRCh38 annotation workflow
-|  |--sample_variant_calling.smk        # Shared per-sample SV calling
-|  |--cohort_merge.smk                  # CHM13 cohort merging
+|  |--sample_variant_calling.smk        # Per-sample SV calling
 |  |--cohort_merge_grch38.smk           # GRCh38 cohort merging
 |  |--needLR_grch38.smk                 # needLR annotation
 |  |--crossref_confirmation_grch38smk   # CHM13 -> GRCh38 confirmation
-|  |--run_snakemake_evaluation.sh       # SBATCH script to run the tool-reference evaluation
 |  |--run_snakemake_annotation.sh       # SBATCH script to run the annotation pipeline
-|  |_envs/                              # Conda environments
+|  |_envs/                              # Conda environments dependencies
 |
 |__ README.md
 ```
@@ -58,10 +51,26 @@ Reads are aligned againts both:
 This dual reference allows: 
 
 - Improved variant discovery
-- Cross-reference comparison
-- Evaluation across genome builds
+- Cross reference comparison and confirmation
 
-### Variant Calling
+Run:
+```bash
+sbatch run_snakemake_align.sh
+```
+
+### Alignment QC
+
+The Quality Check is composed by:
+
+- Alfred to compute alignment statistics
+- Mosdepth to compute coverage
+
+Run:
+```bash
+sbatch run_snakemake_alignqc.sh
+```
+
+### Variant Calling and Annotation
 
 Structural variants are detected using:
 
@@ -69,40 +78,20 @@ Structural variants are detected using:
 - CuteSV
 - Delly lr
 
-Per-sample calls are filtered and normalized, then merged at cohort level.
+Per-sample calls are:
 
-### Benchmarking Workflow
+- Filtered and normalized
+- Merged at single sample level across tools
+- Merged accross samples
+- Merged at cohort level
+- Annotated using needLR v4.0
 
-Run:
-```bash
-sbatch variant_calling/run_snakemake_evaluation.sh
-```
-
-Includes:
-
-- Per-sample SV calling
-- Cohort merging (CHM13)
-- tool/reference comparison
-- evaluation using Truvari
-
-### Annotation Workflow
+The confirmation table is computed from the cohort vcf info fields about support. 
 
 Run:
 ```bash
 sbatch variant_calling/run_snakemake_annotation.sh
-```
-
-Includes:
-
-- GRCh38 cohort construction
-- Force genotyping across samples
-- Structural variant annotation with needLR v3.5
-- Cross-reference validation:
-  - CHM13 lifted variants (CrossMap)
-  - Variants are matched using Truvari
-  - GRCh38 variants are labeled as:
-    - Confirmed_by_CHM13
-    - GRCh38_only
+``` 
 
 The needLR tool is integrated in the annotation workflow with the most recent version version 4.0, but is also available as docker container of the v3.5 in variant_calling/container.
 
