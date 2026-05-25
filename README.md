@@ -38,7 +38,8 @@ Repository structure:
 |  |-- run_snakemake_annotation.sh      # SBATCH script to run the annotation pipeline
 |  |-- envs/                            # Conda environments dependencies
 |
-|__ README.md
+|-- plots/                              # Plot scripts folder
+|-- README.md
 ```
 
 
