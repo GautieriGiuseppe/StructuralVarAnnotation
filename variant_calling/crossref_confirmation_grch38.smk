@@ -2,155 +2,17 @@ import os
 
 OUTDIR = config["output"]
 
-# ------------------------------------------------------------------------------
-# Lift CHM13 cohort VCF to GRCh38
-# ------------------------------------------------------------------------------
-rule crossmap_chm13_cohort_to_grch38:
-    input:
-        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor.vcf.gz",
-        tbi=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor.vcf.gz.tbi",
-        chain=config["chain_file"],
-        ref=config["reference_uncompressed"]["grch38"]
-    output:
-        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.raw.vcf"
-    conda:
-        "envs/crossmap_truvari.yml"
-    threads: 2
-    resources:
-        mem_mb=config["mm"],
-        time=config["ht"]
-    shell:
-        r"""
-        mkdir -p $(dirname {output.vcf})
+# ==============================================================================
+# Build confirmation table directly from the integrated GRCh38 cohort INFO fields
+# ==============================================================================
 
-        CrossMap vcf \
-            {input.chain} \
-            {input.vcf} \
-            {input.ref} \
-            {output.vcf}
-        """
-
-# ------------------------------------------------------------------------------
-# Filter BND variants in both callsets
-# ------------------------------------------------------------------------------
-rule filter_grch38_cohort_for_confirmation:
+rule build_grch38_confirmation_from_info:
     input:
         vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         tbi=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi"
     output:
-        vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.canonical.vcf.gz",
-        tbi=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.canonical.vcf.gz.tbi"
-    conda:
-        "envs/crossmap_truvari.yml"
-    threads: 2
-    resources:
-        mem_mb=config["mm"],
-        time=config["ht"]
-    shell:
-        r"""
-        bcftools view \
-            -i 'INFO/SVTYPE="DEL" || INFO/SVTYPE="INS" || INFO/SVTYPE="DUP" || INFO/SVTYPE="INV"' \
-            {input.vcf} -O z -o {output.vcf}
-        tabix -f -p vcf {output.vcf}
-        """
-
-rule filter_lifted_chm13_for_confirmation:
-    input:
-        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz",
-        tbi=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz.tbi"
-    output:
-        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.canonical.vcf.gz",
-        tbi=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.canonical.vcf.gz.tbi"
-    conda:
-        "envs/crossmap_truvari.yml"
-    threads: 2
-    resources:
-        mem_mb=config["mm"],
-        time=config["ht"]
-    shell:
-        r"""
-        bcftools view \
-            -i 'INFO/SVTYPE="DEL" || INFO/SVTYPE="INS" || INFO/SVTYPE="DUP" || INFO/SVTYPE="INV"' \
-            {input.vcf} -O z -o {output.vcf}
-        tabix -f -p vcf {output.vcf}
-        """
-
-# ------------------------------------------------------------------------------
-# Sort + bgzip + index lifted VCF
-# ------------------------------------------------------------------------------
-rule sort_index_chm13_lifted_grch38:
-    input:
-        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.raw.vcf"
-    output:
-        vcf=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz",
-        tbi=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz.tbi"
-    conda:
-        "envs/crossmap_truvari.yml"
-    threads: 4
-    resources:
-        mem_mb=config["hm"],
-        time=config["ht"]
-    shell:
-        r"""
-        tmp_clean={OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.cleaned.vcf
-
-        awk 'BEGIN{{FS=OFS="\t"}}
-             /^#/ {{print; next}}
-             ($2 ~ /^[0-9]+$/) && ($2 > 0) {{print}}
-        ' {input.vcf} > $tmp_clean
-
-        bcftools sort $tmp_clean -O z -o {output.vcf}
-        tabix -f -p vcf {output.vcf}
-
-        rm -f $tmp_clean
-        """
-
-# ------------------------------------------------------------------------------
-# Compare native GRCh38 vs lifted CHM13 using truvari
-# ------------------------------------------------------------------------------
-rule truvari_match_grch38_vs_chm13lifted:
-    input:
-        base=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.canonical.vcf.gz",
-        comp=f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.canonical.vcf.gz",
-        ref=config["reference"]["grch38"]
-    output:
-        summary=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/summary.json",
-        tp_base=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/tp-base.vcf.gz",
-        tp_comp=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/tp-comp.vcf.gz",
-        fn=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/fn.vcf.gz",
-        fp=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/fp.vcf.gz"
-    conda:
-        "envs/crossmap_truvari.yml"
-    threads: 4
-    resources:
-        mem_mb=config["hm"],
-        time=config["ht"]
-    shell:
-        r"""
-        rm -rf {OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari
-
-        truvari bench \
-            -b {input.base} \
-            -c {input.comp} \
-            -f {input.ref} \
-            -o {OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari \
-            --passonly \
-            --pctseq 0 \
-            --pctsize 0 \
-            --pctovl 0 \
-            -r 500 \
-            --pick multi
-        """
-
-# ------------------------------------------------------------------------------
-# Build confirmation table for native GRCh38 variants
-# ------------------------------------------------------------------------------
-rule build_grch38_confirmation_table:
-    input:
-        tp_base=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/tp-base.vcf.gz",
-        fn=f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/fn.vcf.gz"
-    output:
-        tsv=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv"
+        tsv=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
+        summary=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json"
     conda:
         "envs/crossmap_truvari.yml"
     threads: 1
@@ -159,10 +21,124 @@ rule build_grch38_confirmation_table:
         time=config["mt"]
     shell:
         r"""
-        (
-            bcftools query -f '%CHROM\t%POS\t%INFO/SVTYPE\t%INFO/SVLEN\tconfirmed_by_CHM13\n' {input.tp_base}
-            bcftools query -f '%CHROM\t%POS\t%INFO/SVTYPE\t%INFO/SVLEN\tGRCh38_only\n' {input.fn}
-        ) | \
-        awk 'BEGIN{{OFS="\t"; print "CHROM","POS","SVTYPE","SVLEN","CrossRef_support"}} {{print $1,$2,$3,$4,$5}}' \
-        > {output.tsv}
+        python - <<'PY'
+import gzip
+import json
+
+vcf_path = "{input.vcf}"
+tsv_path = "{output.tsv}"
+summary_path = "{output.summary}"
+
+def parse_info(info_str):
+    info = {{}}
+    if info_str in ("", "."):
+        return info
+    for item in info_str.split(";"):
+        if not item:
+            continue
+        if "=" in item:
+            k, v = item.split("=", 1)
+            info[k] = v
+        else:
+            info[item] = True
+    return info
+
+def open_text(path):
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt")
+    return open(path, "r")
+
+counts = {{
+    "confirmed_by_CHM13": 0,
+    "GRCh38_only": 0,
+    "CHM13_lifted_only": 0,
+    "unsupported_unknown": 0,
+}}
+
+total = 0
+native_records = 0
+lifted_records = 0
+
+with open_text(vcf_path) as inp, open(tsv_path, "w") as out:
+    out.write(
+        "CHROM\\tPOS\\tID\\tSVTYPE\\tSVLEN\\t"
+        "TOOLREF_SUPP\\tTOOLREF_SUPP_VEC\\t"
+        "SAMPLE_SUPP\\tSAMPLE_SUPP_VEC\\t"
+        "NATIVE_GRCH38_SUPP\\tLIFTED_CHM13_GRCH38_SUPP\\t"
+        "CrossRef_support\\n"
+    )
+
+    for line in inp:
+        if line.startswith("#"):
+            continue
+
+        fields = line.rstrip("\\n").split("\\t")
+        if len(fields) < 8:
+            continue
+
+        chrom = fields[0]
+        pos = fields[1]
+        var_id = fields[2]
+        info = parse_info(fields[7])
+
+        svtype = info.get("SVTYPE", ".")
+        svlen = info.get("SVLEN", ".")
+        toolref_supp = info.get("TOOLREF_SUPP", "0")
+        toolref_vec = info.get("TOOLREF_SUPP_VEC", ".")
+        sample_supp = info.get("SAMPLE_SUPP", "0")
+        sample_vec = info.get("SAMPLE_SUPP_VEC", ".")
+        native = int(info.get("NATIVE_GRCH38_SUPP", "0"))
+        lifted = int(info.get("LIFTED_CHM13_GRCH38_SUPP", "0"))
+
+        if native > 0:
+            native_records += 1
+        if lifted > 0:
+            lifted_records += 1
+
+        if native > 0 and lifted > 0:
+            label = "confirmed_by_CHM13"
+        elif native > 0 and lifted == 0:
+            label = "GRCh38_only"
+        elif native == 0 and lifted > 0:
+            label = "CHM13_lifted_only"
+        else:
+            label = "unsupported_unknown"
+
+        counts[label] += 1
+        total += 1
+
+        out.write(
+            f"{{chrom}}\\t{{pos}}\\t{{var_id}}\\t{{svtype}}\\t{{svlen}}\\t"
+            f"{{toolref_supp}}\\t{{toolref_vec}}\\t"
+            f"{{sample_supp}}\\t{{sample_vec}}\\t"
+            f"{{native}}\\t{{lifted}}\\t{{label}}\\n"
+        )
+
+native_denominator = counts["confirmed_by_CHM13"] + counts["GRCh38_only"]
+if native_denominator > 0:
+    confirmation_rate_among_native_grch38 = counts["confirmed_by_CHM13"] / native_denominator
+else:
+    confirmation_rate_among_native_grch38 = None
+
+summary = {{
+    "total_records": total,
+    "confirmed_by_CHM13": counts["confirmed_by_CHM13"],
+    "GRCh38_only": counts["GRCh38_only"],
+    "CHM13_lifted_only": counts["CHM13_lifted_only"],
+    "unsupported_unknown": counts["unsupported_unknown"],
+    "native_grch38_records": native_records,
+    "lifted_chm13_grch38_records": lifted_records,
+    "confirmation_rate_among_native_grch38": confirmation_rate_among_native_grch38,
+    "definition": {{
+        "confirmed_by_CHM13": "NATIVE_GRCH38_SUPP > 0 and LIFTED_CHM13_GRCH38_SUPP > 0",
+        "GRCh38_only": "NATIVE_GRCH38_SUPP > 0 and LIFTED_CHM13_GRCH38_SUPP == 0",
+        "CHM13_lifted_only": "NATIVE_GRCH38_SUPP == 0 and LIFTED_CHM13_GRCH38_SUPP > 0"
+    }}
+}}
+
+with open(summary_path, "w") as out:
+    json.dump(summary, out, indent=4)
+
+print(json.dumps(summary, indent=4))
+PY
         """

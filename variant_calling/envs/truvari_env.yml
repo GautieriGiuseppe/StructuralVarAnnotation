@@ -1,0 +1,15 @@
+name: truvari_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - python=3.11
+  - bcftools=1.21
+  - htslib=1.21
+  - tabix=1.11
+  - survivor=1.0.7
+  - truvari=5.4.0
+  - pandas
+  - numpy

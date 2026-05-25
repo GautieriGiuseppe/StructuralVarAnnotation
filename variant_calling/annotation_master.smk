@@ -24,21 +24,21 @@ include: "crossref_confirmation_grch38.smk"
 
 rule all:
     input:
-        # GRCh38 cohort
+        # Integrated GRCh38 cohort
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
         f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
+
+        # GRCh38 force-genotyped matrix
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
 
-        # needLR
+        # needLR on integrated GRCh38 genotyped matrix
         os.path.join(
             NEEDLR_OUTDIR,
             "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
         ),
 
-        # cross-reference confirmation
-        f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz",
-        f"{OUTDIR}/cohort_results/CHM13_final_cohort_survivor_to_GRCh38.vcf.gz.tbi",
-        f"{OUTDIR}/cohort_results/grch38_vs_chm13lifted_truvari/summary.json",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv"
+        # Confirmation from INFO fields, not Truvari
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json"

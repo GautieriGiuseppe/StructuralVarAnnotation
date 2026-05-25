@@ -116,24 +116,3 @@ rule delly_to_symbolic:
         mem_mb = config['mm'],
         time   = config['ht']
     shell: "python3 delly_to_symbolic.py {input.vcf} {output.vcf}"
-
-rule crossmap_liftover:
-    input:
-        vcf = lambda wildcards: (
-            config['output'] + f'/{wildcards.batch}/{wildcards.sample}/03.variant_calling'
-            f'/{wildcards.sample}_{wildcards.source}_delly_symbolic.vcf'
-            if wildcards.tool == 'delly'
-            else
-            config['output'] + f'/{wildcards.batch}/{wildcards.sample}/03.variant_calling'
-            f'/{wildcards.sample}_{wildcards.source}_{wildcards.tool}.vcf'
-        ),
-        chain      = config['chain_file'],
-        target_ref = lambda wildcards: config['reference'][wildcards.target]
-    output:
-        vcf = config['output'] + '/{batch}/{sample}/03.variant_calling/liftover/{tool}_{sample}_{source}-to-{target}.vcf'
-    conda: "envs/crossmap.yml"
-    threads: 8
-    resources:
-        mem_mb = config['mm'],
-        time   = config['ht']
-    shell: "CrossMap vcf {input.chain} {input.vcf} {input.target_ref} {output.vcf}"
