@@ -19,26 +19,26 @@ Repository structure:
 
 ```
 .
-|-- align.smk                           # Alignment workflow
-|-- alignqc.smk	                        # Alignment QC workflow
-|-- config.yml                          # General config containing references and parameters
-|-- alignqc_env.yml                     # Conda environment for QC
-|-- run_snakemake_align.sh              # SBATCH script to run the alignment
-|-- run_snakemake_alignqc.sh            # SBATCH script to run the alignemnt QC
+|-- align.smk                            # Alignment workflow
+|-- alignqc.smk	                         # Alignment QC workflow
+|-- config.yml                           # General config containing references and parameters
+|-- alignqc_env.yml                      # Conda environment for QC
+|-- run_snakemake_align.sh               # SBATCH script to run the alignment
+|-- run_snakemake_alignqc.sh             # SBATCH script to run the alignemnt QC
 |
-|-- variant_calling/                    # Variant calling module
-|  |-- add_toolref_support_info.py      # Script to add tool-reference support field
-|  |-- annotation_master.smk            # GRCh38 annotation workflow
-|  |-- delly_to_symbolic.py             # Script to adapt delly output to vcf standard
-|  |-- fix_genotype_header.py           # Script to fix sniffles genotyped header vcf
-|  |-- sample_variant_calling.smk       # Per-sample SV calling
-|  |-- cohort_merge_grch38.smk          # GRCh38 cohort merging
-|  |-- needLR_grch38.smk                # needLR annotation
-|  |-- crossref_confirmation_grch38smk  # CHM13 -> GRCh38 confirmation
-|  |-- run_snakemake_annotation.sh      # SBATCH script to run the annotation pipeline
-|  |-- envs/                            # Conda environments dependencies
+|-- variant_calling/                     # Variant calling module
+|  |-- add_toolref_support_info.py       # Script to add tool-reference support field
+|  |-- annotation_master.smk             # GRCh38 annotation workflow
+|  |-- delly_to_symbolic.py              # Script to adapt delly output to vcf standard
+|  |-- fix_genotype_header.py            # Script to fix sniffles genotyped header vcf
+|  |-- sample_variant_calling.smk        # Per-sample SV calling
+|  |-- cohort_merge_grch38.smk           # GRCh38 cohort merging
+|  |-- needLR_grch38.smk                 # needLR annotation
+|  |-- crossref_confirmation_grch38.smk  # CHM13 -> GRCh38 confirmation
+|  |-- run_snakemake_annotation.sh       # SBATCH script to run the annotation pipeline
+|  |-- envs/                             # Conda environments dependencies
 |
-|-- plots/                              # Plot scripts folder
+|-- plots/                               # Plot scripts folder
 |-- README.md
 ```
 
