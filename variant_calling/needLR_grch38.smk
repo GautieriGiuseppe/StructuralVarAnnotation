@@ -24,7 +24,7 @@ rule grch38_needlr_prepare_input:
             "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.vcf.gz.tbi"
         )
     conda:
-        "envs/truvari_env.yml"
+        "variant_calling/envs/truvari_env.yml"
     threads: 4
     resources:
         mem_mb=config["mm"],
@@ -59,7 +59,7 @@ rule grch38_needlr:
             "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
         ))
     conda:
-        "envs/needlr_env.yml"
+        "variant_calling/envs/needlr_env.yml"
     threads: config["hc"]
     resources:
         mem_mb=config["hm"],

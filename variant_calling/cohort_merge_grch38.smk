@@ -55,7 +55,7 @@ rule pass_sniffles_grch38:
     output:
         f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_sniffles_pass.vcf"
     conda:
-        "envs/truvari_env.yml"
+        "variant_calling/envs/truvari_env.yml"
     threads: 2
     resources:
         mem_mb=config["mm"],
@@ -70,7 +70,7 @@ rule pass_delly_grch38:
     output:
         f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_delly_pass.vcf"
     conda:
-        "envs/truvari_env.yml"
+        "variant_calling/envs/truvari_env.yml"
     threads: 2
     resources:
         mem_mb=config["mm"],
@@ -85,7 +85,7 @@ rule pass_cutesv_grch38:
     output:
         f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_cuteSV_pass.vcf"
     conda:
-        "envs/truvari_env.yml"
+        "variant_calling/envs/truvari_env.yml"
     threads: 2
     resources:
         mem_mb=config["mm"],
@@ -110,7 +110,7 @@ rule crossmap_tool_chm13_to_grch38:
     output:
         raw=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/liftover/{{tool}}_{{sample}}_chm13-to-grch38.raw.vcf"
     conda:
-        "envs/crossmap_truvari.yml"
+        "variant_calling/envs/crossmap_truvari.yml"
     threads: 2
     resources:
         mem_mb=config["mm"],
@@ -133,7 +133,7 @@ rule clean_sort_tool_chm13_to_grch38:
     output:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/liftover/{{tool}}_{{sample}}_chm13-to-grch38.toolref.vcf"
     conda:
-        "envs/crossmap_truvari.yml"
+        "variant_calling/envs/crossmap_truvari.yml"
     threads: 2
     resources:
         mem_mb=config["mm"],
@@ -159,7 +159,7 @@ rule pass_filter_tool_chm13_lifted_to_grch38:
     output:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/liftover/{{tool}}_{{sample}}_chm13-to-grch38.toolref_pass.vcf"
     conda:
-        "envs/crossmap_truvari.yml"
+        "variant_calling/envs/crossmap_truvari.yml"
     threads: 2
     resources:
         mem_mb=config["mm"],
@@ -246,7 +246,7 @@ rule grch38_toolref_48way_merge:
         use_size=1,
         min_size=30
     conda:
-        "envs/crossmap_truvari.yml"
+        "variant_calling/envs/crossmap_truvari.yml"
     threads: 4
     resources:
         mem_mb=config["hm"],
@@ -278,14 +278,14 @@ rule annotate_grch38_toolref_support:
     output:
         vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf"
     conda:
-        "envs/crossmap_truvari.yml"
+        "variant_calling/envs/crossmap_truvari.yml"
     threads: 1
     resources:
         mem_mb=config["mm"],
         time=config["mt"]
     shell:
         r"""
-        python add_toolref_support_info.py \
+        python variant_calling/add_toolref_support_info.py \
             --vcf {input.vcf} \
             --metadata {input.metadata} \
             --out {output.vcf} \
@@ -310,7 +310,7 @@ rule grch38_cohort_survivor_merge:
         tbi=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
         table=f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv"
     conda:
-        "envs/crossmap_truvari.yml"
+        "variant_calling/envs/crossmap_truvari.yml"
     threads: 4
     resources:
         mem_mb=config["hm"],

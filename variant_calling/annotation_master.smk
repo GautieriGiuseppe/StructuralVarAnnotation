@@ -16,11 +16,11 @@ with open(samples_file, "r") as f:
 OUTDIR = config["output"]
 NEEDLR_OUTDIR = os.path.join(OUTDIR, config["needlr"].get("outdir", "needLR_output"))
 
-include: "sample_variant_calling.smk"
-include: "cohort_merge_grch38.smk"
-include: "force_genotype_grch38.smk"
-include: "needLR_grch38.smk"
-include: "crossref_confirmation_grch38.smk"
+include: "variant_calling/sample_variant_calling.smk"
+include: "variant_calling/cohort_merge_grch38.smk"
+include: "variant_calling/force_genotype_grch38.smk"
+include: "variant_calling/needLR_grch38.smk"
+include: "variant_calling/crossref_confirmation_grch38.smk"
 
 rule all:
     input:
