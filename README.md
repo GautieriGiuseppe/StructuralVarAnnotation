@@ -1,7 +1,7 @@
 
-# ImmuneVariantCalling
+# StructuralVarAnnotation
 
-Snakemake-based pipeline for alignment and variant calling, designed for HPC execution.
+Snakemake-based pipeline for alignment, variant calling and annotation designed for HPC execution.
 
 ## Overview
 
