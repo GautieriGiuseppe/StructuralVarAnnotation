@@ -8,23 +8,39 @@ OUTDIR=""
 CONFIG="$REPO_DIR/config.yml"
 JOBS=100
 DRYRUN=0
+SLURM=0
+CLUSTER_JOBS=0
+PARTITION="cpuq"
 
 usage() {
     cat <<EOF
 StructuralVarAnnotation
 
 Usage:
-  StructuralVarAnnotation --samples samples.tsv --outdir results/run_name [options]
+  StructuralVarAnnotation.sh --samples samples.tsv --outdir results/run_name [options]
 
 Required:
   --samples FILE        Sample TSV with sample_id, ubam, summary, fastq, batch_id
-  --outdir DIR          Output/results directory
+  --outdir DIR          Output directory
 
 Options:
   --config FILE         Config YAML [default: repo config.yml]
   --jobs N              Number of Snakemake jobs [default: 100]
+  --slurm               Submit the Snakemake controller with sbatch
+  --cluster-jobs        Internal/developer option: submit workflow rules with sbatch
+  --partition NAME      SLURM partition [default: cpu]
   --dry-run             Dry run only
   --help                Show this help
+
+Examples:
+  Direct/local Snakemake:
+    bin/StructuralVarAnnotation.sh --samples samples.tsv --outdir results/test_run
+
+  Submit full controller to SLURM and submit workflow rules as SLURM jobs:
+    bin/StructuralVarAnnotation.sh --samples samples.tsv --outdir results/test_run --slurm --jobs 200
+
+  Run controller in current shell but submit workflow rules to SLURM:
+    bin/StructuralVarAnnotation.sh --samples samples.tsv --outdir results/test_run --cluster-jobs --jobs 200
 EOF
 }
 
@@ -44,6 +60,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --jobs)
             JOBS="$2"
+            shift 2
+            ;;
+        --slurm)
+            SLURM=1
+            shift
+            ;;
+        --cluster-jobs)
+            CLUSTER_JOBS=1
+            shift
+            ;;
+        --partition)
+            PARTITION="$2"
             shift 2
             ;;
         --dry-run)
@@ -84,8 +112,34 @@ if [[ ! -f "$CONFIG" ]]; then
     exit 1
 fi
 
-mkdir -p "$OUTDIR" "$OUTDIR/logs"
+mkdir -p "$OUTDIR" "$OUTDIR/logs" "$REPO_DIR/logs"
 
+# ---------------------------------------------------------------------
+# Submit controller job to SLURM
+# ---------------------------------------------------------------------
+if [[ "$SLURM" -eq 1 ]]; then
+    export SVA_REPO_DIR="$REPO_DIR"
+    export SVA_SAMPLES="$SAMPLES"
+    export SVA_CONFIG="$CONFIG"
+    export SVA_OUTDIR="$OUTDIR"
+    export SVA_JOBS="$JOBS"
+    export SVA_PARTITION="$PARTITION"
+
+    echo "Submitting StructuralVarAnnotation controller to SLURM:"
+    echo "  samples:   $SVA_SAMPLES"
+    echo "  config:    $SVA_CONFIG"
+    echo "  outdir:    $SVA_OUTDIR"
+    echo "  jobs:      $SVA_JOBS"
+    echo "  partition: $SVA_PARTITION"
+    echo
+
+    sbatch "$REPO_DIR/run_workflow.sh"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------
+# Run Snakemake controller directly
+# ---------------------------------------------------------------------
 CMD=(
     snakemake
     -s "$REPO_DIR/workflow_master.smk"
@@ -94,18 +148,35 @@ CMD=(
         "samples=$SAMPLES"
         "output=$OUTDIR"
     --use-conda
+    --conda-frontend mamba
     --rerun-incomplete
     --latency-wait 120
     --printshellcmds
     --jobs "$JOBS"
 )
 
+if [[ "$CLUSTER_JOBS" -eq 1 ]]; then
+    CMD+=(
+        --cluster
+        "sbatch --partition=${PARTITION} --cpus-per-task={threads} --mem={resources.mem_mb}M --time={resources.time} --output=${OUTDIR}/logs/%x_%j.out --error=${OUTDIR}/logs/%x_%j.err"
+    )
+fi
+
 if [[ "$DRYRUN" -eq 1 ]]; then
     CMD+=(-n)
 fi
 
+echo "Repository:   $REPO_DIR"
+echo "Samples:      $SAMPLES"
+echo "Config:       $CONFIG"
+echo "Output:       $OUTDIR"
+echo "Jobs:         $JOBS"
+echo "Cluster jobs: $CLUSTER_JOBS"
+echo
+
 echo "Running:"
 printf ' %q' "${CMD[@]}"
+echo
 echo
 
 "${CMD[@]}"
