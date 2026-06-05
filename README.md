@@ -52,7 +52,6 @@ Repository structure:
 |-- README.md
 ```
 
-
 ## Workflow Description
 
 ### Alignment
@@ -144,7 +143,7 @@ cp samples.example.tsv samples.tsv
 
 The values of samples and output can be overridden from command line with --samples and --outdir.
 
-### Usage
+### Local Usage
 
 Dry run:
 ```bash
@@ -161,6 +160,18 @@ bin/StructuralVarAnnotation \
   --outdir /path/to/results/run_name \
   --config /path/to/config.yml \
   --jobs 200 
+```
+
+### SLURM Usage
+
+Run controller in current shell, submit everything with one command:
+```bash
+bin/StructuralVarAnnotation \
+  --samples samples.tsv \
+  --config config.yml \
+  --outdir results/ \
+  --jobs 150 \
+  --slurm
 ```
 
 samples tsv file example:
