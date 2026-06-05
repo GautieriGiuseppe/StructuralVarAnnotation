@@ -1,4 +1,3 @@
-
 """
 needLR annotation burden and support plots
 ------------------------------------------
@@ -9,7 +8,10 @@ Input:
 Output:
   - needlr_annotation_burden_and_support.png
   - needlr_annotation_burden_and_support.pdf
+  - needlr_variant_annotation_table.tsv
   - needlr_annotation_burden_summary.tsv
+  - needlr_known_vs_novel_annotation_burden.tsv
+  - needlr_genomic_context_burden.tsv
   - needlr_carrier_count_distribution.tsv
 
 This script uses pure Python parsing of the VCF.
@@ -18,8 +20,7 @@ No bcftools required.
 
 import os
 import gzip
-import re
-from collections import Counter
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -32,21 +33,21 @@ from matplotlib.ticker import FuncFormatter
 
 
 # =============================================================================
-# CONFIG
+# DEFAULTS
 # =============================================================================
 
-OUTDIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping"
+DEFAULT_BASE_DIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping"
 
-NEEDLR_ANNOTATED_VCF = (
-    OUTDIR
+DEFAULT_NEEDLR_ANNOTATED_VCF = (
+    DEFAULT_BASE_DIR
     + "/needLR_output/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
 )
 
-OUT_DIR = OUTDIR + "/cohort_results/needlr_annotation_plots"
-OUT_PREFIX = "needlr_annotation_burden_and_support"
+DEFAULT_OUT_DIR = DEFAULT_BASE_DIR + "/cohort_results/needlr_annotation_plots"
+DEFAULT_OUT_PREFIX = "needlr_annotation_burden_and_support"
 
 CANONICAL_SVTYPES = {"DEL", "INS", "DUP", "INV"}
 
@@ -61,6 +62,42 @@ COLORS = {
 
 
 # =============================================================================
+# ARGPARSE
+# =============================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Plot needLR annotation burden and cohort support summary."
+    )
+
+    parser.add_argument(
+        "--vcf",
+        default=DEFAULT_NEEDLR_ANNOTATED_VCF,
+        help="Input needLR-annotated VCF.gz."
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default=DEFAULT_OUT_DIR,
+        help="Output directory."
+    )
+
+    parser.add_argument(
+        "--out-prefix",
+        default=DEFAULT_OUT_PREFIX,
+        help="Output prefix without extension."
+    )
+
+    parser.add_argument(
+        "--title",
+        default="needLR annotation burden and support",
+        help="Main figure title."
+    )
+
+    return parser.parse_args()
+
+
+# =============================================================================
 # HELPERS
 # =============================================================================
 
@@ -72,24 +109,32 @@ def open_text(path):
 
 def parse_info(info_str):
     info = {}
+
+    if info_str in {"", "."}:
+        return info
+
     for item in info_str.split(";"):
         if not item:
             continue
+
         if "=" in item:
             k, v = item.split("=", 1)
             info[k] = v
         else:
             info[item] = True
+
     return info
 
 
 def is_present(value):
     if value is None:
         return False
+
     if value is True:
         return True
 
     s = str(value).strip()
+
     if s in {"", ".", "NA", "NaN", "nan", "NAN", "None", "none"}:
         return False
 
@@ -118,17 +163,6 @@ def any_info_present(info, keys):
     return any(is_present(info.get(k)) for k in keys)
 
 
-def any_flag_true(info, keys):
-    for k in keys:
-        if k in info:
-            v = info[k]
-            if v is True:
-                return True
-            if str(v).strip() not in {"0", "False", "false", ".", "", "NA"}:
-                return True
-    return False
-
-
 def fmt_int(x, _):
     return f"{int(x):,}"
 
@@ -141,22 +175,6 @@ def style_ax(ax, grid_axis="y"):
     ax.tick_params(labelsize=10, colors="#444444")
     ax.grid(axis=grid_axis, color="#EAEAEA", linewidth=0.8)
     ax.set_axisbelow(True)
-
-
-def add_bar_labels(ax, bars, values, suffix="", fontsize=9):
-    ymax = max([b.get_height() for b in bars] + [1])
-    ax.set_ylim(0, ymax * 1.18)
-
-    for b, v in zip(bars, values):
-        ax.text(
-            b.get_x() + b.get_width() / 2,
-            b.get_height() + ymax * 0.015,
-            f"{v:.1f}{suffix}" if isinstance(v, float) else f"{int(v):,}{suffix}",
-            ha="center",
-            va="bottom",
-            fontsize=fontsize,
-            clip_on=False,
-        )
 
 
 def normalize_svtype(raw):
@@ -185,6 +203,7 @@ def infer_control_af(info):
     candidate_keys = [
         "Pop_Freq_ALL",
         "Allele_Freq_ALL",
+        "Allele_Freq_ALL_Control",
         "AF_ALL",
         "AF_1KGP_ALL",
         "gnomAD_AF",
@@ -369,6 +388,7 @@ def build_burden_tables(df):
 
     context = []
     n = len(df)
+
     for label, col in context_items:
         context.append(
             {
@@ -397,8 +417,9 @@ def build_burden_tables(df):
 # PLOT
 # =============================================================================
 
-def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix):
+def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix, title):
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
     fig.subplots_adjust(
         left=0.08,
         right=0.98,
@@ -470,25 +491,28 @@ def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix):
     ax = axes[1, 0]
     style_ax(ax, grid_axis="x")
 
+    context_order = [
+        "Repeat",
+        "Segdup",
+        "TRE",
+        "Telomeric",
+        "Centromeric",
+        "HiConf",
+        "Genes",
+        "CDS",
+    ]
+
     context_plot = context.copy()
     context_plot["Context"] = pd.Categorical(
         context_plot["Context"],
-        categories=[
-            "Repeat",
-            "Segdup",
-            "TRE",
-            "Telomeric",
-            "Centromeric",
-            "HiConf",
-            "Genes",
-            "CDS",
-        ],
+        categories=context_order,
         ordered=True,
     )
     context_plot = context_plot.sort_values("Context")
 
     y = np.arange(len(context_plot))
-    bars = ax.barh(
+
+    ax.barh(
         y,
         context_plot["Percent"],
         color=COLORS["Context"],
@@ -516,7 +540,8 @@ def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix):
     ]
 
     x = np.arange(len(carrier_plot))
-    bars = ax.bar(
+
+    ax.bar(
         x,
         carrier_plot["count"],
         color=COLORS["Carrier"],
@@ -551,7 +576,7 @@ def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix):
     )
 
     fig.suptitle(
-        "needLR annotation burden and support",
+        title,
         fontsize=18,
         fontweight="bold",
         y=0.985,
@@ -567,12 +592,14 @@ def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix):
 # =============================================================================
 
 def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+    args = parse_args()
+
+    os.makedirs(args.out_dir, exist_ok=True)
 
     print("Loading needLR VCF:")
-    print(NEEDLR_ANNOTATED_VCF)
+    print(args.vcf)
 
-    df = load_needlr_vcf(NEEDLR_ANNOTATED_VCF)
+    df = load_needlr_vcf(args.vcf)
 
     print()
     print("Loaded canonical SVs:", f"{len(df):,}")
@@ -580,39 +607,46 @@ def main():
 
     burden, known_novel, context, carrier = build_burden_tables(df)
 
-    out_prefix = os.path.join(OUT_DIR, OUT_PREFIX)
+    out_prefix = os.path.join(args.out_dir, args.out_prefix)
 
     df.to_csv(
-        os.path.join(OUT_DIR, "needlr_variant_annotation_table.tsv"),
+        os.path.join(args.out_dir, "needlr_variant_annotation_table.tsv"),
         sep="\t",
         index=False,
     )
 
     burden.to_csv(
-        os.path.join(OUT_DIR, "needlr_annotation_burden_summary.tsv"),
+        os.path.join(args.out_dir, "needlr_annotation_burden_summary.tsv"),
         sep="\t",
         index=False,
     )
 
     known_novel.to_csv(
-        os.path.join(OUT_DIR, "needlr_known_vs_novel_annotation_burden.tsv"),
+        os.path.join(args.out_dir, "needlr_known_vs_novel_annotation_burden.tsv"),
         sep="\t",
         index=False,
     )
 
     context.to_csv(
-        os.path.join(OUT_DIR, "needlr_genomic_context_burden.tsv"),
+        os.path.join(args.out_dir, "needlr_genomic_context_burden.tsv"),
         sep="\t",
         index=False,
     )
 
     carrier.to_csv(
-        os.path.join(OUT_DIR, "needlr_carrier_count_distribution.tsv"),
+        os.path.join(args.out_dir, "needlr_carrier_count_distribution.tsv"),
         sep="\t",
         index=False,
     )
 
-    plot_needlr_burden(burden, known_novel, context, carrier, out_prefix)
+    plot_needlr_burden(
+        burden=burden,
+        known_novel=known_novel,
+        context=context,
+        carrier=carrier,
+        out_prefix=out_prefix,
+        title=args.title,
+    )
 
     print()
     print("Saved:")

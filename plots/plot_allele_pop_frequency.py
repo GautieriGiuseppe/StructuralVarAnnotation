@@ -1,4 +1,3 @@
-
 """
 needLR control population frequency plots
 -----------------------------------------
@@ -13,6 +12,9 @@ Input:
 Outputs:
   - needlr_control_population_frequency_summary.png
   - needlr_control_population_frequency_summary.pdf
+  - needlr_control_population_frequency_variant_table.tsv
+  - needlr_mean_control_af_among_present.tsv
+  - needlr_control_population_presence.tsv
   - needlr_control_population_frequency_summary.tsv
 
 Definitions:
@@ -24,6 +26,8 @@ Definitions:
 
 import os
 import gzip
+import argparse
+
 import numpy as np
 import pandas as pd
 
@@ -34,28 +38,27 @@ from matplotlib.ticker import FuncFormatter
 
 
 # =============================================================================
-# CONFIG
+# DEFAULTS
 # =============================================================================
 
-OUTDIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping"
+DEFAULT_BASE_DIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping"
 
-NEEDLR_ANNOTATED_VCF = (
-    OUTDIR
+DEFAULT_NEEDLR_ANNOTATED_VCF = (
+    DEFAULT_BASE_DIR
     + "/needLR_output/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
 )
 
-OUT_DIR = OUTDIR + "/cohort_results/needlr_annotation_plots"
-OUT_PREFIX = "needlr_control_population_frequency_summary"
+DEFAULT_OUT_DIR = DEFAULT_BASE_DIR + "/cohort_results/needlr_annotation_plots"
+DEFAULT_OUT_PREFIX = "needlr_control_population_frequency_summary"
 
 CANONICAL_SVTYPES = {"DEL", "INS", "DUP", "INV"}
 
 ANCESTRIES = ["AFR", "AMR", "EAS", "EUR", "SAS", "ALL"]
 ANCESTRIES_FOR_PRESENCE = ["AFR", "AMR", "EAS", "EUR", "SAS"]
 
-# same blue for most ancestries, darker blue for EUR
 BAR_COLORS_AF = {
     "AFR": "#5B83B1",
     "AMR": "#5B83B1",
@@ -75,6 +78,42 @@ BAR_COLORS_PRESENCE = {
 
 
 # =============================================================================
+# ARGPARSE
+# =============================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Plot needLR control population frequency summary."
+    )
+
+    parser.add_argument(
+        "--vcf",
+        default=DEFAULT_NEEDLR_ANNOTATED_VCF,
+        help="Input needLR-annotated VCF.gz."
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default=DEFAULT_OUT_DIR,
+        help="Output directory."
+    )
+
+    parser.add_argument(
+        "--out-prefix",
+        default=DEFAULT_OUT_PREFIX,
+        help="Output prefix without extension."
+    )
+
+    parser.add_argument(
+        "--title",
+        default="needLR control population frequency summary",
+        help="Main figure title."
+    )
+
+    return parser.parse_args()
+
+
+# =============================================================================
 # HELPERS
 # =============================================================================
 
@@ -86,24 +125,32 @@ def open_text(path):
 
 def parse_info(info_str):
     info = {}
+
+    if info_str in {"", "."}:
+        return info
+
     for item in info_str.split(";"):
         if not item:
             continue
+
         if "=" in item:
             k, v = item.split("=", 1)
             info[k] = v
         else:
             info[item] = True
+
     return info
 
 
 def is_present(value):
     if value is None:
         return False
+
     if value is True:
         return True
 
     s = str(value).strip()
+
     if s in {"", ".", "NA", "NaN", "nan", "NAN", "None", "none"}:
         return False
 
@@ -165,15 +212,11 @@ def find_first_float(info, candidate_keys):
         val = as_float(info.get(key))
         if pd.notna(val):
             return val
+
     return np.nan
 
 
 def infer_freq(info, ancestry):
-    """
-    Flexible parser for possible needLR frequency field names.
-
-    It tries Pop_Freq first, then Allele_Freq, then abbreviated AF-style fields.
-    """
     candidate_keys = [
         f"Pop_Freq_{ancestry}",
         f"Population_Freq_{ancestry}",
@@ -190,10 +233,6 @@ def infer_freq(info, ancestry):
 
 
 def infer_count(info, ancestry):
-    """
-    Flexible parser for possible needLR count field names.
-    Counts are not strictly required, but they help classify presence if AF is missing.
-    """
     candidate_keys = [
         f"Pop_Count_{ancestry}",
         f"Population_Count_{ancestry}",
@@ -280,6 +319,7 @@ def summarize_population_frequency(df):
     total_n = len(df)
 
     mean_af_rows = []
+
     for ancestry in ANCESTRIES:
         freq_col = f"{ancestry}_freq"
         present_col = f"{ancestry}_present"
@@ -301,6 +341,7 @@ def summarize_population_frequency(df):
     mean_af = pd.DataFrame(mean_af_rows)
 
     presence_rows = []
+
     for ancestry in ANCESTRIES_FOR_PRESENCE:
         present_col = f"{ancestry}_present"
         n_present = int(df[present_col].sum())
@@ -324,8 +365,9 @@ def summarize_population_frequency(df):
 # PLOT
 # =============================================================================
 
-def plot_population_frequency(mean_af, presence, out_prefix):
+def plot_population_frequency(mean_af, presence, out_prefix, title):
     fig, axes = plt.subplots(1, 2, figsize=(14, 6.2))
+
     fig.subplots_adjust(
         left=0.07,
         right=0.98,
@@ -423,7 +465,7 @@ def plot_population_frequency(mean_af, presence, out_prefix):
     ax.yaxis.set_major_formatter(FuncFormatter(fmt_percent))
 
     fig.suptitle(
-        "needLR control population frequency summary",
+        title,
         fontsize=18,
         fontweight="bold",
         y=0.98,
@@ -439,12 +481,14 @@ def plot_population_frequency(mean_af, presence, out_prefix):
 # =============================================================================
 
 def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+    args = parse_args()
+
+    os.makedirs(args.out_dir, exist_ok=True)
 
     print("Loading needLR VCF:")
-    print(NEEDLR_ANNOTATED_VCF)
+    print(args.vcf)
 
-    df = load_population_frequency_table(NEEDLR_ANNOTATED_VCF)
+    df = load_population_frequency_table(args.vcf)
 
     print()
     print("Loaded canonical SVs:", f"{len(df):,}")
@@ -458,33 +502,38 @@ def main():
         how="outer",
     )
 
-    out_prefix = os.path.join(OUT_DIR, OUT_PREFIX)
+    out_prefix = os.path.join(args.out_dir, args.out_prefix)
 
     df.to_csv(
-        os.path.join(OUT_DIR, "needlr_control_population_frequency_variant_table.tsv"),
+        os.path.join(args.out_dir, "needlr_control_population_frequency_variant_table.tsv"),
         sep="\t",
         index=False,
     )
 
     mean_af.to_csv(
-        os.path.join(OUT_DIR, "needlr_mean_control_af_among_present.tsv"),
+        os.path.join(args.out_dir, "needlr_mean_control_af_among_present.tsv"),
         sep="\t",
         index=False,
     )
 
     presence.to_csv(
-        os.path.join(OUT_DIR, "needlr_control_population_presence.tsv"),
+        os.path.join(args.out_dir, "needlr_control_population_presence.tsv"),
         sep="\t",
         index=False,
     )
 
     summary.to_csv(
-        os.path.join(OUT_DIR, "needlr_control_population_frequency_summary.tsv"),
+        os.path.join(args.out_dir, "needlr_control_population_frequency_summary.tsv"),
         sep="\t",
         index=False,
     )
 
-    plot_population_frequency(mean_af, presence, out_prefix)
+    plot_population_frequency(
+        mean_af=mean_af,
+        presence=presence,
+        out_prefix=out_prefix,
+        title=args.title,
+    )
 
     print()
     print("Saved:")

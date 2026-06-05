@@ -1,21 +1,33 @@
 import os
 import gzip
-from collections import OrderedDict
+import argparse
 
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 
-VCF = "/group/dominguez/shared_notebooks/Immune_variation/mapping/cohort_results/GRCh38_final_cohort_survivor.vcf.gz"
+# =============================================================================
+# DEFAULTS
+# =============================================================================
 
-OUT_DIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping/cohort_results/tool_reference_upset_new_cohort"
-OUT_PREFIX = "GRCh38_integrated_toolref_upset_mean_sample_frequency"
+DEFAULT_VCF = (
+    "/group/dominguez/shared_notebooks/Immune_variation/mapping/cohort_results/"
+    "GRCh38_final_cohort_survivor.vcf.gz"
+)
 
-TOP_N = 40
+DEFAULT_OUT_DIR = (
+    "/group/dominguez/shared_notebooks/Immune_variation/mapping/cohort_results/"
+    "tool_reference_upset_new_cohort"
+)
+
+DEFAULT_OUT_PREFIX = "GRCh38_integrated_toolref_upset_mean_sample_frequency"
+
+DEFAULT_TOP_N = 40
 
 # Actual TOOLREF_SUPP_VEC order from cohort_merge_grch38.smk:
 # 0 Sniffles native GRCh38
@@ -38,16 +50,82 @@ DISPLAY_ORDER = [0, 3, 1, 4, 2, 5]
 SET_LABELS = [VECTOR_ORDER[i] for i in DISPLAY_ORDER]
 N_SETS = len(SET_LABELS)
 
-CLASS_COLORS = {
-    "1 sample": "#d73027",
-    "2 samples": "#f46d43",
-    "3–4 samples": "#fee08b",
-    "5–6 samples": "#66bd63",
-    "7 samples": "#74add1",
-    "8 samples": "#4575b4",
-    "unknown": "#bdbdbd",
-}
+SAMPLE_SUPPORT_MIN = 1
+SAMPLE_SUPPORT_MAX = 8
 
+
+# =============================================================================
+# ARGPARSE
+# =============================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate an UpSet-style plot for the integrated GRCh38 "
+            "tool/reference support vectors from GRCh38_final_cohort_survivor.vcf.gz."
+        )
+    )
+
+    parser.add_argument(
+        "--vcf",
+        default=DEFAULT_VCF,
+        help="Input integrated GRCh38 cohort VCF.gz containing TOOLREF_SUPP_VEC."
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default=DEFAULT_OUT_DIR,
+        help="Output directory for plots and TSV summaries."
+    )
+
+    parser.add_argument(
+        "--out-prefix",
+        default=DEFAULT_OUT_PREFIX,
+        help="Output file prefix without extension."
+    )
+
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=DEFAULT_TOP_N,
+        help="Number of largest intersections to plot."
+    )
+
+    parser.add_argument(
+        "--cmap",
+        default="viridis",
+        help="Matplotlib colormap used for mean sample support."
+    )
+
+    parser.add_argument(
+        "--sample-support-min",
+        type=float,
+        default=SAMPLE_SUPPORT_MIN,
+        help="Minimum value for color scale."
+    )
+
+    parser.add_argument(
+        "--sample-support-max",
+        type=float,
+        default=SAMPLE_SUPPORT_MAX,
+        help="Maximum value for color scale."
+    )
+
+    parser.add_argument(
+        "--title",
+        default=(
+            "Tool Intersection UpSet — Bar Color = Mean Sample Frequency\n"
+            "Integrated GRCh38 cohort: native GRCh38 + CHM13 calls lifted to GRCh38"
+        ),
+        help="Plot title."
+    )
+
+    return parser.parse_args()
+
+
+# =============================================================================
+# HELPERS
+# =============================================================================
 
 def open_vcf(path):
     return gzip.open(path, "rt") if path.endswith(".gz") else open(path, "r")
@@ -55,12 +133,20 @@ def open_vcf(path):
 
 def parse_info(info_str):
     info = {}
+
+    if info_str in {"", "."}:
+        return info
+
     for item in info_str.split(";"):
+        if not item:
+            continue
+
         if "=" in item:
             k, v = item.split("=", 1)
             info[k] = v
         else:
             info[item] = True
+
     return info
 
 
@@ -73,33 +159,23 @@ def safe_int(x):
         return np.nan
 
 
-def sample_class(mean_sample_supp):
+def color_for_mean_sample_supp(mean_sample_supp, cmap_name, vmin, vmax):
     if pd.isna(mean_sample_supp):
-        return "unknown"
+        return "#BDBDBD"
 
-    x = float(mean_sample_supp)
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = cm.get_cmap(cmap_name)
 
-    if x < 1.5:
-        return "1 sample"
-    elif x < 2.5:
-        return "2 samples"
-    elif x < 4.5:
-        return "3–4 samples"
-    elif x < 6.5:
-        return "5–6 samples"
-    elif x < 7.5:
-        return "7 samples"
-    else:
-        return "8 samples"
-
-
-def color_for_mean_sample_supp(mean_sample_supp):
-    return CLASS_COLORS[sample_class(mean_sample_supp)]
+    return cmap(norm(float(mean_sample_supp)))
 
 
 def reorder_vec(vec):
     return "".join(vec[i] for i in DISPLAY_ORDER)
 
+
+# =============================================================================
+# LOAD
+# =============================================================================
 
 def load_toolref_patterns(vcf):
     rows = []
@@ -141,7 +217,11 @@ def load_toolref_patterns(vcf):
     return pd.DataFrame(rows)
 
 
-def summarize_intersections(df, top_n=40):
+# =============================================================================
+# SUMMARIZE
+# =============================================================================
+
+def summarize_intersections(df, top_n, cmap_name, vmin, vmax):
     grouped = (
         df.groupby("TOOLREF_SUPP_VEC")
         .agg(
@@ -160,10 +240,12 @@ def summarize_intersections(df, top_n=40):
         ascending=[False, False]
     ).head(top_n).reset_index(drop=True)
 
-    grouped["sample_class"] = grouped["mean_sample_supp"].apply(sample_class)
-    grouped["bar_color"] = grouped["mean_sample_supp"].apply(color_for_mean_sample_supp)
+    grouped["bar_color"] = grouped["mean_sample_supp"].apply(
+        lambda x: color_for_mean_sample_supp(x, cmap_name, vmin, vmax)
+    )
 
     set_sizes = []
+
     for i, label in enumerate(SET_LABELS):
         set_sizes.append({
             "set": label,
@@ -173,7 +255,19 @@ def summarize_intersections(df, top_n=40):
     return grouped, pd.DataFrame(set_sizes)
 
 
-def plot_upset(intersections, set_sizes, out_prefix):
+# =============================================================================
+# PLOT
+# =============================================================================
+
+def plot_upset(
+    intersections,
+    set_sizes,
+    out_prefix,
+    cmap_name,
+    vmin,
+    vmax,
+    title,
+):
     n = len(intersections)
     x = np.arange(n)
 
@@ -207,8 +301,6 @@ def plot_upset(intersections, set_sizes, out_prefix):
     ymax = intersections["intersection_size"].max() * 1.18
     ax_bar.set_ylim(0, ymax)
 
-    # IMPORTANT: force the top bars to align exactly with the matrix columns
-    # and prevent the first bar/label from being clipped.
     left_pad = 0.85
     right_pad = 0.55
     ax_bar.set_xlim(-left_pad, n - right_pad)
@@ -232,34 +324,34 @@ def plot_upset(intersections, set_sizes, out_prefix):
     ax_bar.spines["top"].set_visible(False)
     ax_bar.spines["right"].set_visible(False)
 
-    legend_order = [
-        "1 sample",
-        "2 samples",
-        "3–4 samples",
-        "5–6 samples",
-        "7 samples",
-        "8 samples",
-        "unknown",
-    ]
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
-    handles = [
-        mpatches.Patch(color=CLASS_COLORS[k], label=k)
-        for k in legend_order
-    ]
-
-    ax_bar.legend(
-        handles=handles,
-        title="Mean sample\nsupport class",
-        frameon=False,
-        loc="upper right",
-        fontsize=10,
-        title_fontsize=11,
+    sm = cm.ScalarMappable(
+        cmap=cm.get_cmap(cmap_name),
+        norm=norm
     )
+    sm.set_array([])
+
+    cbar = fig.colorbar(
+        sm,
+        ax=ax_bar,
+        fraction=0.025,
+        pad=0.015
+    )
+
+    cbar.set_label("Mean sample support", fontsize=10)
+
+    if vmin == 1 and vmax == 8:
+        cbar.set_ticks(range(1, 9))
 
     y = np.arange(N_SETS)
 
     set_sizes = set_sizes.copy()
-    set_sizes["set"] = pd.Categorical(set_sizes["set"], categories=SET_LABELS, ordered=True)
+    set_sizes["set"] = pd.Categorical(
+        set_sizes["set"],
+        categories=SET_LABELS,
+        ordered=True
+    )
     set_sizes = set_sizes.sort_values("set")
 
     ax_sets.barh(y, set_sizes["size"], color="black", height=0.62)
@@ -293,7 +385,12 @@ def plot_upset(intersections, set_sizes, out_prefix):
 
     for yi in range(N_SETS):
         if yi % 2 == 1:
-            ax_matrix.axhspan(yi - 0.5, yi + 0.5, color="#F2F2F2", zorder=0)
+            ax_matrix.axhspan(
+                yi - 0.5,
+                yi + 0.5,
+                color="#F2F2F2",
+                zorder=0
+            )
 
     for i in range(n):
         ax_matrix.scatter(
@@ -334,8 +431,7 @@ def plot_upset(intersections, set_sizes, out_prefix):
     ax_matrix.spines["left"].set_visible(False)
 
     fig.suptitle(
-        "Tool Intersection UpSet — Bar Color = Mean Sample Frequency\n"
-        "Integrated GRCh38 cohort: native GRCh38 + CHM13 calls lifted to GRCh38",
+        title,
         fontsize=15,
         fontweight="bold",
         y=0.98
@@ -346,39 +442,60 @@ def plot_upset(intersections, set_sizes, out_prefix):
     plt.close(fig)
 
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+# =============================================================================
+# MAIN
+# =============================================================================
 
-    df = load_toolref_patterns(VCF)
+def main():
+    args = parse_args()
+
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    df = load_toolref_patterns(args.vcf)
 
     if df.empty:
         raise RuntimeError(
             "No variants with TOOLREF_SUPP_VEC found. "
-            "Check that GRCh38_final_cohort_survivor.vcf.gz is the new annotated cohort."
+            "Check that the input VCF is the annotated integrated GRCh38 cohort."
         )
 
-    intersections, set_sizes = summarize_intersections(df, top_n=TOP_N)
+    intersections, set_sizes = summarize_intersections(
+        df=df,
+        top_n=args.top_n,
+        cmap_name=args.cmap,
+        vmin=args.sample_support_min,
+        vmax=args.sample_support_max,
+    )
 
     df.to_csv(
-        os.path.join(OUT_DIR, "toolref_variant_support_table.tsv"),
+        os.path.join(args.out_dir, "toolref_variant_support_table.tsv"),
         sep="\t",
         index=False
     )
 
     intersections.to_csv(
-        os.path.join(OUT_DIR, "toolref_upset_intersections.tsv"),
+        os.path.join(args.out_dir, "toolref_upset_intersections.tsv"),
         sep="\t",
         index=False
     )
 
     set_sizes.to_csv(
-        os.path.join(OUT_DIR, "toolref_upset_set_sizes.tsv"),
+        os.path.join(args.out_dir, "toolref_upset_set_sizes.tsv"),
         sep="\t",
         index=False
     )
 
-    out_prefix = os.path.join(OUT_DIR, OUT_PREFIX)
-    plot_upset(intersections, set_sizes, out_prefix)
+    out_prefix = os.path.join(args.out_dir, args.out_prefix)
+
+    plot_upset(
+        intersections=intersections,
+        set_sizes=set_sizes,
+        out_prefix=out_prefix,
+        cmap_name=args.cmap,
+        vmin=args.sample_support_min,
+        vmax=args.sample_support_max,
+        title=args.title,
+    )
 
     print("Saved:")
     print(out_prefix + ".png")

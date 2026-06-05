@@ -1,0 +1,41 @@
+samples: "samples.tsv"
+output: "results/default_run"
+
+# Resource presets
+# first letter(s):
+#   l  = low
+#   m  = mid
+#   h  = high
+#   vh = very high
+# second/third letter:
+#   m = memory in MB
+#   t = time in minutes
+#   c = cores
+lm: 500
+mm: 8000
+hm: 50000
+vhm: 90000
+
+lt: 10
+mt: 300
+ht: 3000
+vht: 10000
+
+lc: 8
+mc: 16
+hc: 32
+
+reference:
+  chm13: "/path/to/chm13.fasta.gz"
+  grch38: "/path/to/grch38.fasta.gz"
+
+reference_uncompressed:
+  grch38: "/path/to/grch38.fasta"
+
+chain_file: "/path/to/hs1ToHg38.over.chain"
+
+survivor: "SURVIVOR"
+
+needlr:
+  outdir: "needLR_output"
+

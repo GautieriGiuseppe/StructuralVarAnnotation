@@ -1,7 +1,6 @@
 import os
 
 OUTDIR = config["output"]
-NEEDLR_SCRIPT = config["needlr"]["cohort_script"]
 NEEDLR_OUTDIR = os.path.join(OUTDIR, config["needlr"].get("outdir", "needLR_output"))
 
 # ------------------------------------------------------------------------------
@@ -24,7 +23,7 @@ rule grch38_needlr_prepare_input:
             "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.vcf.gz.tbi"
         )
     conda:
-        "variant_calling/envs/truvari_env.yml"
+        "envs/truvari_env.yml"
     threads: 4
     resources:
         mem_mb=config["mm"],
@@ -59,7 +58,7 @@ rule grch38_needlr:
             "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
         ))
     conda:
-        "variant_calling/envs/needlr_env.yml"
+        "envs/needlr_env.yml"
     threads: config["hc"]
     resources:
         mem_mb=config["hm"],

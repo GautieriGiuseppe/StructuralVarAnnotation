@@ -14,31 +14,38 @@ with open(samples_file, "r") as f:
             VALID_PAIRS.append((fields[batch_idx], fields[sample_idx]))
 
 OUTDIR = config["output"]
-NEEDLR_OUTDIR = os.path.join(OUTDIR, config["needlr"].get("outdir", "needLR_output"))
+NEEDLR_OUTDIR = os.path.join(
+    OUTDIR,
+    config.get("needlr", {}).get("outdir", "needLR_output")
+)
 
+include: "align.smk"
+include: "alignqc.smk"
 include: "variant_calling/sample_variant_calling.smk"
 include: "variant_calling/cohort_merge_grch38.smk"
 include: "variant_calling/force_genotype_grch38.smk"
 include: "variant_calling/needLR_grch38.smk"
 include: "variant_calling/crossref_confirmation_grch38.smk"
+include: "variant_calling/qc_report_generator.smk"
 
 rule all:
     input:
-        # Integrated GRCh38 cohort
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
         f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
 
-        # GRCh38 force-genotyped matrix
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
 
-        # needLR on integrated GRCh38 genotyped matrix
         os.path.join(
             NEEDLR_OUTDIR,
             "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
         ),
 
-        # Confirmation from INFO fields, not Truvari
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json"
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json",
+
+        f"{OUTDIR}/cohort_results/read_qc/multiqc/multiqc_report.html",
+
+        f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_report.html",
+        f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_summary.tsv",

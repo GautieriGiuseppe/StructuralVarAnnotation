@@ -14,7 +14,7 @@ rule build_grch38_confirmation_from_info:
         tsv=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
         summary=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json"
     conda:
-        "variant_calling/envs/crossmap_truvari.yml"
+        "envs/crossmap_truvari.yml"
     threads: 1
     resources:
         mem_mb=config["mm"],

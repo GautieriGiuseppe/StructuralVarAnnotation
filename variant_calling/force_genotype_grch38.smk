@@ -21,7 +21,7 @@ rule grch38_force_genotype:
     output:
         f"{OUTDIR}/{{batch}}/{{sample}}/04.force_calling/{{sample}}_GRCh38_final_cohort_survivor_genotyped.vcf"
     conda:
-        "variant_calling/envs/sniffles.yml"
+        "envs/sniffles.yml"
     threads: config["hc"]
     resources:
         mem_mb=config["hm"],
@@ -44,7 +44,7 @@ rule grch38_fix_genotype_header:
     output:
         f"{OUTDIR}/{{batch}}/{{sample}}/04.force_calling/{{sample}}_GRCh38_final_cohort_survivor_genotyped.fixed.vcf"
     conda:
-        "variant_calling/envs/sniffles.yml"
+        "envs/sniffles.yml"
     threads: 1
     resources:
         mem_mb=config["mm"],
@@ -62,7 +62,7 @@ rule grch38_compress_genotyped:
         bcf=f"{OUTDIR}/{{batch}}/{{sample}}/04.force_calling/{{sample}}_GRCh38_final_cohort_survivor_genotyped.bcf",
         csi=f"{OUTDIR}/{{batch}}/{{sample}}/04.force_calling/{{sample}}_GRCh38_final_cohort_survivor_genotyped.bcf.csi"
     conda:
-        "variant_calling/envs/truvari_env.yml"
+        "envs/truvari_env.yml"
     threads: 4
     resources:
         mem_mb=config["mm"],
@@ -86,7 +86,7 @@ rule grch38_merge_genotyped_matrix:
         vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
         tbi=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi"
     conda:
-        "variant_calling/envs/truvari_env.yml"
+        "envs/truvari_env.yml"
     threads: 4
     resources:
         mem_mb=config["hm"],

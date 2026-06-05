@@ -1,0 +1,10 @@
+name: read_qc
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - fastqc
+  - nanoplot
+  - multiqc

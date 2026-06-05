@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+SAMPLES=""
+OUTDIR=""
+CONFIG="$REPO_DIR/config.yml"
+JOBS=100
+DRYRUN=0
+
+usage() {
+    cat <<EOF
+StructuralVarAnnotation
+
+Usage:
+  StructuralVarAnnotation --samples samples.tsv --outdir results/run_name [options]
+
+Required:
+  --samples FILE        Sample TSV with sample_id, ubam, summary, fastq, batch_id
+  --outdir DIR          Output/results directory
+
+Options:
+  --config FILE         Config YAML [default: repo config.yml]
+  --jobs N              Number of Snakemake jobs [default: 100]
+  --dry-run             Dry run only
+  --help                Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --samples)
+            SAMPLES="$2"
+            shift 2
+            ;;
+        --outdir)
+            OUTDIR="$2"
+            shift 2
+            ;;
+        --config)
+            CONFIG="$2"
+            shift 2
+            ;;
+        --jobs)
+            JOBS="$2"
+            shift 2
+            ;;
+        --dry-run)
+            DRYRUN=1
+            shift
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "ERROR: unknown argument: $1" >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$SAMPLES" ]]; then
+    echo "ERROR: --samples is required" >&2
+    usage
+    exit 1
+fi
+
+if [[ -z "$OUTDIR" ]]; then
+    echo "ERROR: --outdir is required" >&2
+    usage
+    exit 1
+fi
+
+if [[ ! -f "$SAMPLES" ]]; then
+    echo "ERROR: samples file not found: $SAMPLES" >&2
+    exit 1
+fi
+
+if [[ ! -f "$CONFIG" ]]; then
+    echo "ERROR: config file not found: $CONFIG" >&2
+    exit 1
+fi
+
+mkdir -p "$OUTDIR" "$OUTDIR/logs"
+
+CMD=(
+    snakemake
+    -s "$REPO_DIR/workflow_master.smk"
+    --configfile "$CONFIG"
+    --config
+        "samples=$SAMPLES"
+        "output=$OUTDIR"
+    --use-conda
+    --rerun-incomplete
+    --latency-wait 120
+    --printshellcmds
+    --jobs "$JOBS"
+)
+
+if [[ "$DRYRUN" -eq 1 ]]; then
+    CMD+=(-n)
+fi
+
+echo "Running:"
+printf ' %q' "${CMD[@]}"
+echo
+
+"${CMD[@]}"

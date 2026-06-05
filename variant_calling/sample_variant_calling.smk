@@ -1,150 +1,243 @@
+import os
+
+OUTDIR = config["output"]
+
 # ==============================================================================
 #  VARIANT CALLING RULES
 # ==============================================================================
 
-# --- SNIFFLES ---
+# ------------------------------------------------------------------------------
+# SNIFFLES
+# ------------------------------------------------------------------------------
+
 rule sniffles_grch38:
-    input:  
-        sample = config['output'] + '/{batch}/{sample}/01.align/grch38/{sample}.srt.bam'
-    output: 
-        vcf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_grch38_sniffles.vcf',
-        snf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_grch38_sniffles.snf'
-    conda: 
+    input:
+        sample=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/grch38/{{sample}}.srt.bam"
+    output:
+        vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_sniffles.vcf",
+        snf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_sniffles.snf"
+    conda:
         "variant_calling/envs/sniffles.yml"
-    threads: 
-        config['mc']
+    threads:
+        config["mc"]
     resources:
-        mem_mb = config['mm'],
-        time   = config['ht']
-    shell: 
-        "sniffles --input {input.sample} --vcf {output.vcf} --snf {output.snf} --threads {threads}"
+        mem_mb=config["mm"],
+        time=config["ht"]
+    shell:
+        r"""
+        mkdir -p $(dirname {output.vcf})
+
+        sniffles \
+            --input {input.sample} \
+            --vcf {output.vcf} \
+            --snf {output.snf} \
+            --threads {threads}
+        """
+
 
 rule sniffles_chm13:
-    input:  
-        sample = config['output'] + '/{batch}/{sample}/01.align/chm13/{sample}.srt.bam'
-    output: 
-        vcf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_chm13_sniffles.vcf',
-        snf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_chm13_sniffles.snf'
-    conda: 
+    input:
+        sample=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/chm13/{{sample}}.srt.bam"
+    output:
+        vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_sniffles.vcf",
+        snf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_sniffles.snf"
+    conda:
         "variant_calling/envs/sniffles.yml"
-    threads: 
-        config['mc']
+    threads:
+        config["mc"]
     resources:
-        mem_mb = config['mm'],
-        time   = config['ht']
-    shell: 
-        "sniffles --input {input.sample} --vcf {output.vcf} --snf {output.snf} --threads {threads}"
+        mem_mb=config["mm"],
+        time=config["ht"]
+    shell:
+        r"""
+        mkdir -p $(dirname {output.vcf})
 
-# --- DELLY ---
+        sniffles \
+            --input {input.sample} \
+            --vcf {output.vcf} \
+            --snf {output.snf} \
+            --threads {threads}
+        """
+
+
+# ------------------------------------------------------------------------------
+# DELLY
+# ------------------------------------------------------------------------------
+
 rule delly_grch38:
-    input:  
-        reference = config['reference']['grch38'],
-        sample = config['output'] + '/{batch}/{sample}/01.align/grch38/{sample}.srt.bam'
-    output: 
-        config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_grch38_delly.bcf'
-    conda: 
+    input:
+        reference=config["reference"]["grch38"],
+        sample=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/grch38/{{sample}}.srt.bam"
+    output:
+        bcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_delly.bcf"
+    conda:
         "variant_calling/envs/delly.yml"
-    threads: 
-        config['mc']
+    threads:
+        config["mc"]
     resources:
-        mem_mb = config['mm'],
-        time   = config['ht']
-    shell: 
-        "delly lr -y ont -g {input.reference} {input.sample} -o {output}"
+        mem_mb=config["mm"],
+        time=config["ht"]
+    shell:
+        r"""
+        mkdir -p $(dirname {output.bcf})
+
+        delly lr \
+            -y ont \
+            -g {input.reference} \
+            {input.sample} \
+            -o {output.bcf}
+        """
+
 
 rule delly_chm13:
-    input:  
-        reference = config['reference']['chm13'],
-        sample = config['output'] + '/{batch}/{sample}/01.align/chm13/{sample}.srt.bam'
-    output: 
-        config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_chm13_delly.bcf'
-    conda: 
+    input:
+        reference=config["reference"]["chm13"],
+        sample=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/chm13/{{sample}}.srt.bam"
+    output:
+        bcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_delly.bcf"
+    conda:
         "variant_calling/envs/delly.yml"
-    threads: 
-        config['lc']
+    threads:
+        config["lc"]
     resources:
-        mem_mb = config['mm'],
-        time   = config['ht']
-    shell: 
-        "delly lr -y ont -g {input.reference} {input.sample} -o {output}"
-
-# --- CUTESV ---
-rule cuteSV_grch38:
-    input:  
-        bam = config['output'] + '/{batch}/{sample}/01.align/grch38/{sample}.srt.bam',
-        ref = config['reference']['grch38']
-    output: 
-        vcf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_grch38_cuteSV.vcf'
-    conda: 
-        "variant_calling/envs/cutesv.yml"
-    threads: 
-        config['hc']
-    resources:
-        mem_mb = config['hm'],
-        time   = config['ht']
+        mem_mb=config["mm"],
+        time=config["ht"]
     shell:
-        '''
+        r"""
+        mkdir -p $(dirname {output.bcf})
+
+        delly lr \
+            -y ont \
+            -g {input.reference} \
+            {input.sample} \
+            -o {output.bcf}
+        """
+
+
+# ------------------------------------------------------------------------------
+# CUTESV
+# ------------------------------------------------------------------------------
+
+rule cuteSV_grch38:
+    input:
+        bam=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/grch38/{{sample}}.srt.bam",
+        ref=config["reference"]["grch38"]
+    output:
+        vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_cuteSV.vcf"
+    conda:
+        "variant_calling/envs/cutesv.yml"
+    threads:
+        config["hc"]
+    resources:
+        mem_mb=config["hm"],
+        time=config["ht"]
+    shell:
+        r"""
+        mkdir -p $(dirname {output.vcf})
+
         TEMP_DIR="$(dirname {output.vcf})/temp_cutesv_grch38_{wildcards.sample}"
-        mkdir -p $TEMP_DIR
-        cuteSV --threads {threads} --sample {wildcards.sample} --genotype {input.bam} {input.ref} {output.vcf} $TEMP_DIR
-        rm -rf $TEMP_DIR
-        '''
+
+        rm -rf "$TEMP_DIR"
+        mkdir -p "$TEMP_DIR"
+
+        cuteSV \
+            --threads {threads} \
+            --sample {wildcards.sample} \
+            --genotype \
+            {input.bam} \
+            {input.ref} \
+            {output.vcf} \
+            "$TEMP_DIR"
+
+        rm -rf "$TEMP_DIR"
+        """
+
 
 rule cuteSV_chm13:
     input:
-        bam = config['output'] + '/{batch}/{sample}/01.align/chm13/{sample}.srt.bam',
-        ref = config['reference']['chm13']
+        bam=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/chm13/{{sample}}.srt.bam",
+        ref=config["reference"]["chm13"]
     output:
-        vcf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_chm13_cuteSV.vcf'
-    conda: 
+        vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_cuteSV.vcf"
+    conda:
         "variant_calling/envs/cutesv.yml"
-    threads: 
-        config['hc']
+    threads:
+        config["hc"]
     resources:
-        mem_mb = config['vhm'],
-        time   = config['vht']
+        mem_mb=config["vhm"],
+        time=config["vht"]
     shell:
-        '''
+        r"""
+        mkdir -p $(dirname {output.vcf})
+
         TEMP_DIR="$(dirname {output.vcf})/temp_cutesv_chm13_{wildcards.sample}"
-        rm -rf $TEMP_DIR
-        mkdir -p $TEMP_DIR
 
-        cuteSV --threads {threads} --sample {wildcards.sample} --genotype {input.bam} {input.ref} {output.vcf} $TEMP_DIR
+        rm -rf "$TEMP_DIR"
+        mkdir -p "$TEMP_DIR"
 
-        rm -rf $TEMP_DIR
-        '''
+        cuteSV \
+            --threads {threads} \
+            --sample {wildcards.sample} \
+            --genotype \
+            {input.bam} \
+            {input.ref} \
+            {output.vcf} \
+            "$TEMP_DIR"
 
-# --- BCFTOOLS ---
-rule bcf_to_vcf:
-    input:  
-        "{path}/{sample}_{ref}_{tool}.bcf"
-    output: 
-        "{path}/{sample}_{ref}_{tool}.vcf"
-    wildcard_constraints:
-        tool = "delly"
-    conda: 
-        "variant_calling/envs/snakemake.yml"
-    threads: 2
-    resources:
-        mem_mb = config['hm'],
-        time   = config['ht']
-    shell: 
-        "bcftools view -O v {input} > {output}"
+        rm -rf "$TEMP_DIR"
+        """
+
 
 # ==============================================================================
-#  LIFTOVER
+#  BCFTOOLS / FORMAT CONVERSION
+# ==============================================================================
+
+rule bcf_to_vcf:
+    input:
+        "{path}/{sample}_{ref}_{tool}.bcf"
+    output:
+        "{path}/{sample}_{ref}_{tool}.vcf"
+    wildcard_constraints:
+        tool="delly"
+    conda:
+        "variant_calling/envs/snakemake.yml"
+    threads:
+        2
+    resources:
+        mem_mb=config["hm"],
+        time=config["ht"]
+    shell:
+        r"""
+        mkdir -p $(dirname {output})
+
+        bcftools view \
+            -O v \
+            -o {output} \
+            {input}
+        """
+
+
+# ==============================================================================
+#  DELLY SYMBOLIC CONVERSION
 # ==============================================================================
 
 rule delly_to_symbolic:
     input:
-        vcf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_{ref}_delly.vcf'
+        vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_{{ref}}_delly.vcf"
     output:
-        vcf = config['output'] + '/{batch}/{sample}/03.variant_calling/{sample}_{ref}_delly_symbolic.vcf'
-    conda: 
+        vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_{{ref}}_delly_symbolic.vcf"
+    conda:
         "variant_calling/envs/snakemake.yml"
-    threads: 1
+    threads:
+        1
     resources:
-        mem_mb = config['mm'],
-        time   = config['ht']
-    shell: 
-        "python3 variant_calling/delly_to_symbolic.py {input.vcf} {output.vcf}"
+        mem_mb=config["mm"],
+        time=config["ht"]
+    shell:
+        r"""
+        mkdir -p $(dirname {output.vcf})
+
+        python3 variant_calling/delly_to_symbolic.py \
+            {input.vcf} \
+            {output.vcf}
+        """

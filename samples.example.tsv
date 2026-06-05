@@ -1,0 +1,2 @@
+sample_id	ubam	summary	fastq	batch_id
+SAMPLE_001	/path/to/sample_001.ubam	/path/to/sample_001_sequencing_summary.tsv.gz	/path/to/sample_001.fastq.gz	BATCH001

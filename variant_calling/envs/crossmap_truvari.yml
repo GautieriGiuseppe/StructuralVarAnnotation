@@ -8,9 +8,7 @@ dependencies:
   - crossmap
   - survivor
   - samtools
-  - numpy
   - bcftools
   - htslib
   - tabix
   - truvari
-  - pandas

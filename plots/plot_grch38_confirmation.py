@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 """
 Cross-reference confirmation plots from integrated GRCh38 cohort.
@@ -25,6 +26,8 @@ Outputs:
 import os
 import gzip
 import math
+import argparse
+
 import numpy as np
 import pandas as pd
 
@@ -35,23 +38,28 @@ from matplotlib.ticker import FuncFormatter
 
 
 # ==============================================================================
-# CONFIG
+# DEFAULTS
 # ==============================================================================
 
-BASE_DIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping/cohort_results"
+DEFAULT_WORKFLOW_OUTDIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping"
+DEFAULT_BASE_DIR = os.path.join(DEFAULT_WORKFLOW_OUTDIR, "cohort_results")
 
-OUT_DIR = os.path.join(BASE_DIR, "crossref_confirmation_infofield")
-os.makedirs(OUT_DIR, exist_ok=True)
-
-GRCH38_INTEGRATED = os.path.join(BASE_DIR, "GRCh38_final_cohort_survivor.vcf.gz")
-
-# Used only for liftover-count summary panel.
-# The script still works if CHM13_NATIVE is missing.
-CHM13_NATIVE = os.path.join(BASE_DIR, "CHM13_final_cohort_survivor.vcf.gz")
-CHM13_LIFTED_TO_GRCH38 = os.path.join(
-    BASE_DIR,
-    "CHM13_final_cohort_survivor_to_GRCh38.vcf.gz"
+DEFAULT_GRCH38_INTEGRATED = os.path.join(
+    DEFAULT_BASE_DIR,
+    "GRCh38_final_cohort_survivor.vcf.gz"
 )
+
+DEFAULT_OUT_DIR = os.path.join(
+    DEFAULT_BASE_DIR,
+    "crossref_confirmation_infofield"
+)
+
+DEFAULT_BATCH = "NP057"
+
+DEFAULT_SAMPLES = [
+    "CCH_095", "CCH_096", "CCH_097", "CCH_098",
+    "CCH_099", "CCH_100", "CCH_101", "CCH_102",
+]
 
 CANONICAL_SVTYPES = {"DEL", "INS", "DUP", "INV"}
 SVTYPE_ORDER = ["DEL", "INS", "DUP", "INV"]
@@ -88,6 +96,69 @@ plt.rcParams.update({
 
 
 # ==============================================================================
+# ARGPARSE
+# ==============================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate GRCh38 cross-reference confirmation plots using "
+            "integrated cohort INFO fields."
+        )
+    )
+
+    parser.add_argument(
+        "--integrated-vcf",
+        default=DEFAULT_GRCH38_INTEGRATED,
+        help="Input GRCh38 integrated cohort VCF.gz."
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default=DEFAULT_OUT_DIR,
+        help="Output directory for plots and summary tables."
+    )
+
+    parser.add_argument(
+        "--workflow-outdir",
+        default=DEFAULT_WORKFLOW_OUTDIR,
+        help=(
+            "Main workflow output directory containing batch/sample folders. "
+            "Used only for the CHM13 liftover summary panel."
+        )
+    )
+
+    parser.add_argument(
+        "--batch",
+        default=DEFAULT_BATCH,
+        help="Batch ID used for per-sample paths, e.g. NP057."
+    )
+
+    parser.add_argument(
+        "--samples",
+        default=",".join(DEFAULT_SAMPLES),
+        help="Comma-separated sample IDs."
+    )
+
+    parser.add_argument(
+        "--title-prefix",
+        default="Cross-reference confirmation",
+        help="Title prefix used in figures."
+    )
+
+    parser.add_argument(
+        "--skip-liftover-panel",
+        action="store_true",
+        help=(
+            "Skip counting per-tool CHM13 native/lifted files. "
+            "If set, the liftover panel is filled with NA metrics."
+        )
+    )
+
+    return parser.parse_args()
+
+
+# ==============================================================================
 # HELPERS
 # ==============================================================================
 
@@ -99,6 +170,9 @@ def open_vcf(path):
 
 def parse_info(info_str):
     info = {}
+
+    if info_str in {"", "."}:
+        return info
 
     for item in info_str.split(";"):
         if not item:
@@ -199,9 +273,9 @@ def fmt_int(x, _):
     return f"{int(x):,}"
 
 
-def save_figure(fig, prefix):
-    png = os.path.join(OUT_DIR, prefix + ".png")
-    pdf = os.path.join(OUT_DIR, prefix + ".pdf")
+def save_figure(fig, prefix, out_dir):
+    png = os.path.join(out_dir, prefix + ".png")
+    pdf = os.path.join(out_dir, prefix + ".pdf")
 
     fig.savefig(png, dpi=300, bbox_inches="tight")
     fig.savefig(pdf, dpi=300, bbox_inches="tight")
@@ -212,14 +286,25 @@ def save_figure(fig, prefix):
 
 
 def add_bar_labels(ax, bars, values, fontsize=9):
-    ymax = max([b.get_height() for b in bars] + [1])
+    valid_values = [
+        float(v)
+        for v in values
+        if pd.notna(v)
+    ]
+
+    ymax = max([b.get_height() for b in bars] + valid_values + [1])
     ax.set_ylim(0, ymax * 1.18)
 
     for b, v in zip(bars, values):
+        if pd.isna(v):
+            label = "NA"
+        else:
+            label = f"{int(v):,}"
+
         ax.text(
             b.get_x() + b.get_width() / 2,
             b.get_height() + ymax * 0.015,
-            f"{int(v):,}",
+            label,
             ha="center",
             va="bottom",
             fontsize=fontsize,
@@ -228,11 +313,19 @@ def add_bar_labels(ax, bars, values, fontsize=9):
 
 
 def add_percent_labels(ax, bars, values, counts=None, fontsize=8):
-    ymax = max([b.get_height() for b in bars] + [1])
+    valid_values = [
+        float(v)
+        for v in values
+        if pd.notna(v)
+    ]
+
+    ymax = max([b.get_height() for b in bars] + valid_values + [1])
     ax.set_ylim(0, min(115, ymax * 1.25))
 
     for i, (b, v) in enumerate(zip(bars, values)):
-        if counts is None:
+        if pd.isna(v):
+            label = "NA"
+        elif counts is None:
             label = f"{v:.1f}%"
         else:
             label = f"{v:.1f}%\n(n={int(counts[i]):,})"
@@ -282,10 +375,7 @@ def load_integrated_grch38(vcf_path):
             lifted_supp = safe_int(info.get("LIFTED_CHM13_GRCH38_SUPP"), default=0)
 
             any_native = has_info_flag(info, "ANY_NATIVE_GRCH38") or native_supp > 0
-            any_lifted = (
-                has_info_flag(info, "ANY_LIFTED_CHM13_GRCH38") or
-                lifted_supp > 0
-            )
+            any_lifted = has_info_flag(info, "ANY_LIFTED_CHM13_GRCH38") or lifted_supp > 0
 
             confirmed = any_lifted
 
@@ -371,13 +461,13 @@ def add_bins(df):
 
     size_bins = [0, 50, 100, 500, 1000, 5000, 10000, 50000, np.inf]
     size_labels = [
-        "1–50",
-        "51–100",
-        "101–500",
-        "501–1k",
-        "1–5k",
-        "5–10k",
-        "10–50k",
+        "1-50",
+        "51-100",
+        "101-500",
+        "501-1k",
+        "1-5k",
+        "5-10k",
+        "10-50k",
         ">50k",
     ]
 
@@ -396,27 +486,20 @@ def add_bins(df):
         if x == 2:
             return "2"
         if 3 <= x <= 5:
-            return "3–5"
+            return "3-5"
         return ">5"
 
     df["carrier_bin"] = df["SAMPLE_SUPP"].apply(carrier_bin)
     df["carrier_bin"] = pd.Categorical(
         df["carrier_bin"],
-        categories=["1", "2", "3–5", ">5"],
+        categories=["1", "2", "3-5", ">5"],
         ordered=True
     )
 
     return df
 
 
-def count_existing_per_tool_chm13_liftover_inputs():
-    samples = [
-        "CCH_095", "CCH_096", "CCH_097", "CCH_098",
-        "CCH_099", "CCH_100", "CCH_101", "CCH_102"
-    ]
-
-    batch = "NP057"
-
+def count_existing_per_tool_chm13_liftover_inputs(workflow_outdir, batch, samples):
     tools = {
         "sniffles": "sniffles",
         "delly": "delly",
@@ -435,7 +518,7 @@ def count_existing_per_tool_chm13_liftover_inputs():
 
         for sample in samples:
             vcf_root = os.path.join(
-                config_output_dir(),
+                workflow_outdir,
                 batch,
                 sample,
                 "03.variant_calling"
@@ -472,22 +555,38 @@ def count_existing_per_tool_chm13_liftover_inputs():
     return native_total, lifted_total, native_by_tool, lifted_by_tool
 
 
-def config_output_dir():
-    return "/group/dominguez/shared_notebooks/Immune_variation/mapping"
+def build_metrics(df, workflow_outdir, batch, samples, skip_liftover_panel=False):
+    if skip_liftover_panel:
+        chm13_native_raw = np.nan
+        chm13_lifted_raw = np.nan
+        chm13_not_lifted_raw = np.nan
+        pct_liftover_success_raw = np.nan
+        native_by_tool = {
+            "sniffles": np.nan,
+            "delly": np.nan,
+            "cuteSV": np.nan,
+        }
+        lifted_by_tool = {
+            "sniffles": np.nan,
+            "delly": np.nan,
+            "cuteSV": np.nan,
+        }
+    else:
+        chm13_native_raw, chm13_lifted_raw, native_by_tool, lifted_by_tool = (
+            count_existing_per_tool_chm13_liftover_inputs(
+                workflow_outdir=workflow_outdir,
+                batch=batch,
+                samples=samples,
+            )
+        )
 
+        chm13_not_lifted_raw = chm13_native_raw - chm13_lifted_raw
 
-def build_metrics(df):
-    chm13_native_raw, chm13_lifted_raw, native_by_tool, lifted_by_tool = (
-        count_existing_per_tool_chm13_liftover_inputs()
-    )
-
-    chm13_not_lifted_raw = chm13_native_raw - chm13_lifted_raw
-
-    pct_liftover_success_raw = (
-        100 * chm13_lifted_raw / chm13_native_raw
-        if chm13_native_raw > 0
-        else np.nan
-    )
+        pct_liftover_success_raw = (
+            100 * chm13_lifted_raw / chm13_native_raw
+            if chm13_native_raw > 0
+            else np.nan
+        )
 
     lifted_integrated = df["ANY_LIFTED_CHM13_GRCH38"]
     native_integrated = df["ANY_NATIVE_GRCH38"]
@@ -512,7 +611,11 @@ def build_metrics(df):
     for tool in native_by_tool:
         metrics[f"chm13_native_{tool}"] = native_by_tool[tool]
         metrics[f"chm13_lifted_{tool}"] = lifted_by_tool[tool]
-        metrics[f"chm13_lost_{tool}"] = native_by_tool[tool] - lifted_by_tool[tool]
+
+        if pd.notna(native_by_tool[tool]) and pd.notna(lifted_by_tool[tool]):
+            metrics[f"chm13_lost_{tool}"] = native_by_tool[tool] - lifted_by_tool[tool]
+        else:
+            metrics[f"chm13_lost_{tool}"] = np.nan
 
     return metrics
 
@@ -521,7 +624,7 @@ def build_metrics(df):
 # FIGURE 1: SUMMARY
 # ==============================================================================
 
-def plot_summary(df, metrics):
+def plot_summary(df, metrics, out_dir, title_prefix):
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
     # --------------------------------------------------------------------------
@@ -589,13 +692,18 @@ def plot_summary(df, metrics):
         metrics["n_chm13_not_lifted_raw"],
     ]
 
+    plot_values = [
+        0 if pd.isna(v) else v
+        for v in values
+    ]
+
     colors = [
         STATUS_COLORS["native_total"],
         STATUS_COLORS["lifted_total"],
         STATUS_COLORS["not_lifted"],
     ]
 
-    bars = ax.bar(labels, values, color=colors, edgecolor="none", alpha=0.9)
+    bars = ax.bar(labels, plot_values, color=colors, edgecolor="none", alpha=0.9)
     ax.set_ylabel("Number of SVs")
     ax.yaxis.set_major_formatter(FuncFormatter(fmt_int))
     ax.set_title(
@@ -605,12 +713,16 @@ def plot_summary(df, metrics):
     )
     add_bar_labels(ax, bars, values)
 
-    pct_lost = 100 - metrics["pct_chm13_liftover_success_raw"]
+    if pd.notna(metrics["pct_chm13_liftover_success_raw"]):
+        pct_lost = 100 - metrics["pct_chm13_liftover_success_raw"]
+        text = f"{pct_lost:.1f}% not lifted"
+    else:
+        text = "Liftover counts not available"
 
     ax.text(
         0.5,
         0.93,
-        f"{pct_lost:.1f}% not lifted",
+        text,
         transform=ax.transAxes,
         ha="center",
         va="top",
@@ -620,21 +732,21 @@ def plot_summary(df, metrics):
     )
 
     fig.suptitle(
-        "Cross-reference confirmation and liftover summary",
+        f"{title_prefix} and liftover summary",
         fontsize=16,
         fontweight="bold",
         y=0.98
     )
 
     fig.tight_layout(rect=[0, 0, 1, 0.92])
-    save_figure(fig, "crossref_fig1_summary")
+    save_figure(fig, "crossref_fig1_summary", out_dir)
 
 
 # ==============================================================================
 # FIGURE 2: CONFIRMATION PATTERNS
 # ==============================================================================
 
-def plot_confirmation_patterns(df):
+def plot_confirmation_patterns(df, out_dir, title_prefix):
     fig, axes = plt.subplots(2, 2, figsize=(13.5, 10))
 
     # --------------------------------------------------------------------------
@@ -831,21 +943,21 @@ def plot_confirmation_patterns(df):
         )
 
     fig.suptitle(
-        "Cross-reference confirmation patterns from integrated GRCh38 cohort",
+        f"{title_prefix} patterns from integrated GRCh38 cohort",
         fontsize=16,
         fontweight="bold",
         y=0.98
     )
 
     fig.tight_layout(rect=[0, 0, 1, 0.94])
-    save_figure(fig, "crossref_fig2_confirmation_patterns")
+    save_figure(fig, "crossref_fig2_confirmation_patterns", out_dir)
 
 
 # ==============================================================================
 # FIGURE 3: CHROMOSOMES
 # ==============================================================================
 
-def plot_chromosome_confirmation(df):
+def plot_chromosome_confirmation(df, out_dir, title_prefix):
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     chrom_order = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY", "chrM"]
@@ -934,14 +1046,14 @@ def plot_chromosome_confirmation(df):
     )
 
     fig.suptitle(
-        "Chromosomal distribution of cross-reference confirmation",
+        f"Chromosomal distribution of {title_prefix.lower()}",
         fontsize=16,
         fontweight="bold",
         y=0.98
     )
 
     fig.tight_layout(rect=[0, 0, 1, 0.93])
-    save_figure(fig, "crossref_fig3_chromosome_confirmation")
+    save_figure(fig, "crossref_fig3_chromosome_confirmation", out_dir)
 
 
 # ==============================================================================
@@ -949,26 +1061,42 @@ def plot_chromosome_confirmation(df):
 # ==============================================================================
 
 def main():
-    if not os.path.exists(GRCH38_INTEGRATED):
-        raise FileNotFoundError(GRCH38_INTEGRATED)
+    args = parse_args()
+
+    samples = [
+        s.strip()
+        for s in args.samples.split(",")
+        if s.strip()
+    ]
+
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    if not os.path.exists(args.integrated_vcf):
+        raise FileNotFoundError(args.integrated_vcf)
 
     print("Loading integrated GRCh38 cohort:")
-    print(GRCH38_INTEGRATED)
+    print(args.integrated_vcf)
 
-    df = load_integrated_grch38(GRCH38_INTEGRATED)
+    df = load_integrated_grch38(args.integrated_vcf)
     df = add_bins(df)
 
-    metrics = build_metrics(df)
+    metrics = build_metrics(
+        df=df,
+        workflow_outdir=args.workflow_outdir,
+        batch=args.batch,
+        samples=samples,
+        skip_liftover_panel=args.skip_liftover_panel,
+    )
 
     out_table = os.path.join(
-        OUT_DIR,
+        args.out_dir,
         "crossref_infofield_confirmation_table.tsv"
     )
 
     df.to_csv(out_table, sep="\t", index=False)
 
     out_metrics = os.path.join(
-        OUT_DIR,
+        args.out_dir,
         "crossref_infofield_summary_metrics.tsv"
     )
 
@@ -988,13 +1116,28 @@ def main():
     print(out_table)
     print(out_metrics)
 
-    plot_summary(df, metrics)
-    plot_confirmation_patterns(df)
-    plot_chromosome_confirmation(df)
+    plot_summary(
+        df=df,
+        metrics=metrics,
+        out_dir=args.out_dir,
+        title_prefix=args.title_prefix,
+    )
+
+    plot_confirmation_patterns(
+        df=df,
+        out_dir=args.out_dir,
+        title_prefix=args.title_prefix,
+    )
+
+    plot_chromosome_confirmation(
+        df=df,
+        out_dir=args.out_dir,
+        title_prefix=args.title_prefix,
+    )
 
     print("\nDone.")
     print("Output directory:")
-    print(OUT_DIR)
+    print(args.out_dir)
 
 
 if __name__ == "__main__":

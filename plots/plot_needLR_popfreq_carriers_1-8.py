@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-
 import os
 import gzip
+import argparse
+
 import numpy as np
 import pandas as pd
 
@@ -12,24 +12,26 @@ import seaborn as sns
 
 
 # =============================================================================
-# CONFIG
+# DEFAULTS
 # =============================================================================
 
-OUTDIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping"
+DEFAULT_BASE_DIR = "/group/dominguez/shared_notebooks/Immune_variation/mapping"
 
-NEEDLR_VCF = (
-    OUTDIR
+DEFAULT_NEEDLR_VCF = (
+    DEFAULT_BASE_DIR
     + "/needLR_output/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0/"
     + "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
 )
 
-OUT_DIR = (
-    OUTDIR
+DEFAULT_OUT_DIR = (
+    DEFAULT_BASE_DIR
     + "/cohort_results/"
     + "needlr_population_frequency_carriers_1_8"
 )
+
+DEFAULT_OUT_PREFIX = "needlr_popfreq_violin_carrier_counts_1_8"
 
 CANONICAL_SVTYPES = {"DEL", "INS", "DUP", "INV"}
 CARRIER_COUNTS = list(range(1, 9))
@@ -57,6 +59,51 @@ plt.rcParams.update({
 
 
 # =============================================================================
+# ARGPARSE
+# =============================================================================
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Plot needLR control population frequency distributions for "
+            "cohort carrier counts 1-8."
+        )
+    )
+
+    parser.add_argument(
+        "--vcf",
+        default=DEFAULT_NEEDLR_VCF,
+        help="Input needLR-annotated VCF.gz."
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default=DEFAULT_OUT_DIR,
+        help="Output directory."
+    )
+
+    parser.add_argument(
+        "--out-prefix",
+        default=DEFAULT_OUT_PREFIX,
+        help="Output prefix for violin plots without extension."
+    )
+
+    parser.add_argument(
+        "--summary-prefix",
+        default="needlr_popfreq_carrier_counts_1_8",
+        help="Output prefix for summary line plots without extension."
+    )
+
+    parser.add_argument(
+        "--title-prefix",
+        default="needLR control population frequency",
+        help="Title prefix used in figures."
+    )
+
+    return parser.parse_args()
+
+
+# =============================================================================
 # HELPERS
 # =============================================================================
 
@@ -68,19 +115,33 @@ def open_vcf(path):
 
 def parse_info(info_str):
     info = {}
+
+    if info_str in {"", "."}:
+        return info
+
     for item in info_str.split(";"):
         if not item:
             continue
+
         if "=" in item:
             key, value = item.split("=", 1)
             info[key] = value
         else:
             info[item] = True
+
     return info
 
 
 def is_missing(x):
-    return x is None or str(x).strip() in {"", ".", "NA", "NaN", "nan", "NAN", "None"}
+    return x is None or str(x).strip() in {
+        "",
+        ".",
+        "NA",
+        "NaN",
+        "nan",
+        "NAN",
+        "None",
+    }
 
 
 def as_float(x):
@@ -143,6 +204,7 @@ def get_pop_count(info, ancestry):
         f"AC_1KGP_{ancestry}",
         f"1KGP_AC_{ancestry}",
     ]
+
     return get_first_int(info, keys)
 
 
@@ -157,6 +219,7 @@ def get_pop_freq(info, ancestry):
         f"AF_1KGP_{ancestry}",
         f"1KGP_AF_{ancestry}",
     ]
+
     return get_first_float(info, keys)
 
 
@@ -168,6 +231,7 @@ def get_cohort_pop_count(info):
         "Allele_Count_Cohort",
         "Cohort_Allele_Count",
     ]
+
     return get_first_int(info, keys)
 
 
@@ -179,6 +243,7 @@ def get_cohort_pop_freq(info):
         "Allele_Freq_Cohort",
         "Cohort_Allele_Freq",
     ]
+
     return get_first_float(info, keys)
 
 
@@ -186,13 +251,13 @@ def get_cohort_pop_freq(info):
 # LOAD NEEDLR VCF
 # =============================================================================
 
-def load_needlr_carriers_1_8():
-    if not os.path.exists(NEEDLR_VCF):
-        raise FileNotFoundError(NEEDLR_VCF)
+def load_needlr_carriers_1_8(vcf_path):
+    if not os.path.exists(vcf_path):
+        raise FileNotFoundError(vcf_path)
 
     rows = []
 
-    with open_vcf(NEEDLR_VCF) as fh:
+    with open_vcf(vcf_path) as fh:
         for line in fh:
             if line.startswith("#"):
                 continue
@@ -324,7 +389,7 @@ def summarize_pop_freq(df):
 # PLOTS
 # =============================================================================
 
-def plot_popfreq_violin(long_df, out_prefix, present_only=True):
+def plot_popfreq_violin(long_df, out_prefix, title_prefix, present_only=True):
     d = long_df.copy()
 
     if present_only:
@@ -404,7 +469,7 @@ def plot_popfreq_violin(long_df, out_prefix, present_only=True):
         )
 
     fig.suptitle(
-        f"needLR control population frequency distributions {title_suffix}\n"
+        f"{title_prefix} distributions {title_suffix}\n"
         "stratified by cohort carrier count and 1KGP ancestry",
         fontsize=16,
         fontweight="bold",
@@ -424,14 +489,16 @@ def plot_popfreq_violin(long_df, out_prefix, present_only=True):
     print("Saved:", out_pdf)
 
 
-def plot_summary_lines(summary_df, out_prefix):
+def plot_summary_lines(summary_df, out_prefix, title_prefix):
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     ax = axes[0]
+
     for anc in ANCESTRIES:
         d = summary_df[summary_df["ancestry"] == anc].sort_values("Cohort_Pop_Count")
         color = ANCESTRY_COLORS[anc]
         lw = 2.8 if anc == "EUR" else 1.8
+
         ax.plot(
             d["Cohort_Pop_Count"],
             d["mean_pop_freq_present_only"] * 100,
@@ -448,10 +515,12 @@ def plot_summary_lines(summary_df, out_prefix):
     ax.legend(frameon=False, ncol=3)
 
     ax = axes[1]
+
     for anc in ANCESTRIES:
         d = summary_df[summary_df["ancestry"] == anc].sort_values("Cohort_Pop_Count")
         color = ANCESTRY_COLORS[anc]
         lw = 2.8 if anc == "EUR" else 1.8
+
         ax.plot(
             d["Cohort_Pop_Count"],
             d["pct_present"],
@@ -468,7 +537,7 @@ def plot_summary_lines(summary_df, out_prefix):
     ax.legend(frameon=False, ncol=3)
 
     fig.suptitle(
-        "needLR control population frequency context for cohort carrier counts 1–8",
+        f"{title_prefix} context for cohort carrier counts 1-8",
         fontsize=16,
         fontweight="bold",
         y=0.98,
@@ -492,27 +561,29 @@ def plot_summary_lines(summary_df, out_prefix):
 # =============================================================================
 
 def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+    args = parse_args()
+
+    os.makedirs(args.out_dir, exist_ok=True)
 
     print("Loading:")
-    print(NEEDLR_VCF)
+    print(args.vcf)
 
-    df = load_needlr_carriers_1_8()
+    df = load_needlr_carriers_1_8(args.vcf)
     long_df = make_long_popfreq_table(df)
     summary_df = summarize_pop_freq(df)
 
     variant_tsv = os.path.join(
-        OUT_DIR,
+        args.out_dir,
         "needlr_variants_carrier_counts_1_8.tsv"
     )
 
     long_tsv = os.path.join(
-        OUT_DIR,
+        args.out_dir,
         "needlr_popfreq_long_carrier_counts_1_8.tsv"
     )
 
     summary_tsv = os.path.join(
-        OUT_DIR,
+        args.out_dir,
         "needlr_popfreq_summary_carrier_counts_1_8.tsv"
     )
 
@@ -520,29 +591,34 @@ def main():
     long_df.to_csv(long_tsv, sep="\t", index=False)
     summary_df.to_csv(summary_tsv, sep="\t", index=False)
 
-    out_prefix = os.path.join(
-        OUT_DIR,
-        "needlr_popfreq_violin_carrier_counts_1_8"
+    violin_prefix = os.path.join(
+        args.out_dir,
+        args.out_prefix,
+    )
+
+    summary_prefix = os.path.join(
+        args.out_dir,
+        args.summary_prefix,
     )
 
     plot_popfreq_violin(
         long_df,
-        out_prefix,
+        violin_prefix,
+        title_prefix=args.title_prefix,
         present_only=True,
     )
 
     plot_popfreq_violin(
         long_df,
-        out_prefix,
+        violin_prefix,
+        title_prefix=args.title_prefix,
         present_only=False,
     )
 
     plot_summary_lines(
         summary_df,
-        os.path.join(
-            OUT_DIR,
-            "needlr_popfreq_carrier_counts_1_8"
-        ),
+        summary_prefix,
+        title_prefix=args.title_prefix,
     )
 
     print()
