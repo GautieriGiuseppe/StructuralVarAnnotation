@@ -17,7 +17,7 @@ rule sniffles_grch38:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_sniffles.vcf",
         snf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_sniffles.snf"
     conda:
-        "variant_calling/envs/sniffles.yml"
+        "envs/sniffles.yml"
     threads:
         config["mc"]
     resources:
@@ -42,7 +42,7 @@ rule sniffles_chm13:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_sniffles.vcf",
         snf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_sniffles.snf"
     conda:
-        "variant_calling/envs/sniffles.yml"
+        "envs/sniffles.yml"
     threads:
         config["mc"]
     resources:
@@ -71,7 +71,7 @@ rule delly_grch38:
     output:
         bcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_delly.bcf"
     conda:
-        "variant_calling/envs/delly.yml"
+        "envs/delly.yml"
     threads:
         config["mc"]
     resources:
@@ -96,7 +96,7 @@ rule delly_chm13:
     output:
         bcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_delly.bcf"
     conda:
-        "variant_calling/envs/delly.yml"
+        "envs/delly.yml"
     threads:
         config["lc"]
     resources:
@@ -125,7 +125,7 @@ rule cuteSV_grch38:
     output:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_cuteSV.vcf"
     conda:
-        "variant_calling/envs/cutesv.yml"
+        "envs/cutesv.yml"
     threads:
         config["hc"]
     resources:
@@ -160,7 +160,7 @@ rule cuteSV_chm13:
     output:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_cuteSV.vcf"
     conda:
-        "variant_calling/envs/cutesv.yml"
+        "envs/cutesv.yml"
     threads:
         config["hc"]
     resources:
@@ -200,7 +200,7 @@ rule bcf_to_vcf:
     wildcard_constraints:
         tool="delly"
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "envs/snakemake.yml"
     threads:
         2
     resources:
@@ -227,7 +227,7 @@ rule delly_to_symbolic:
     output:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_{{ref}}_delly_symbolic.vcf"
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "envs/snakemake.yml"
     threads:
         1
     resources:

@@ -70,8 +70,8 @@ rule fastqc_reads:
         "envs/read_qc.yml"
     threads: 8
     resources:
-        mem_mb=config["hm"],
-        time=config["ht"]
+        mem_mb=config["vhm"],
+        time=config["vht"]
     params:
         outdir=f"{READ_QC_DIR}/fastqc/{{batch}}/{{sample}}"
     shell:
