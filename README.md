@@ -130,7 +130,7 @@ conda activate snakemake_env
 Make the launcher executable:
 
 ```bash
-chmox +x bin/StructuralVarAnnotation
+chmod +x bin/StructuralVarAnnotation
 ```
 
 ### Configuration
