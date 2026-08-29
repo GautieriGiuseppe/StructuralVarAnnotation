@@ -104,6 +104,30 @@ The workflow generates a complete HTML QC report combining:
 - needLR population frequency plots
 - GRCh38/CHM13 confirmation plots 
 
+## Trio mode
+
+StructuralVarAnnotation supports an optional trio-analysis mode for family-aware downstream interpretation of structural variants.
+
+Trio mode preserves the standard discovery workflow:
+
+1. read QC
+2. alignment to GRCh38 and CHM13
+3. per-sample SV calling
+4. CHM13-to-GRCh38 liftover
+5. integrated GRCh38 cohort merge
+6. GRCh38/CHM13 cross-reference confirmation
+7. cohort-wide force-genotyping
+
+Trio relationships are introduced only after force-genotyping. The genotyped cohort VCF is subset into proband, mother, and father VCFs, which are then used as input to `needLR comparator`.
+
+### Trio metadata file
+
+The trio file is a tab-separated file with the following columns:
+
+```tsv
+family_id	proband	mother	father	proband_batch	mother_batch	father_batch
+AshkenazimTrio	HG002_NA24385	HG004_NA24143	HG003_NA24149	1	1	1
+
 ## Requirements
 
 - Conda/Mamba
@@ -173,6 +197,21 @@ bin/StructuralVarAnnotation \
   --jobs 150 \
   --slurm
 ```
+
+### Trio Usage
+
+Run in trio mode:
+```bash
+bin/StructuralVarAnnotation \
+  --samples samples.tsv \
+  --config config.yml \
+  --outdir trio_results \
+  --jobs 100 \
+  --trio \
+  --slurm
+```
+
+## File tsv example
 
 samples tsv file example:
 
