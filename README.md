@@ -127,6 +127,7 @@ The trio file is a tab-separated file with the following columns:
 ```tsv
 family_id	proband	mother	father	proband_batch	mother_batch	father_batch
 AshkenazimTrio	HG002_NA24385	HG004_NA24143	HG003_NA24149	1	1	1
+```
 
 ## Requirements
 
