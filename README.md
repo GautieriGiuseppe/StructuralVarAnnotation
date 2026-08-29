@@ -44,6 +44,7 @@ Repository structure:
 |  |-- cohort_merge_grch38.smk           # GRCh38 cohort merging
 |  |-- force_genotype_grch38.smk         # Force-genotyping
 |  |-- needLR_grch38.smk                 # needLR annotation
+|  |-- needLR_trio_grch38.smk            # needLR comparator for trio mode
 |  |-- crossref_confirmation_grch38.smk  # CHM13 -> GRCh38 confirmation
 |  |-- qc_report_generator.smk           # Full report build
 |  |-- envs/                             # Conda environments dependencies
