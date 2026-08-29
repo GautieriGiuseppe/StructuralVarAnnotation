@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import gzip
 import argparse
@@ -51,7 +53,6 @@ SET_LABELS = [VECTOR_ORDER[i] for i in DISPLAY_ORDER]
 N_SETS = len(SET_LABELS)
 
 SAMPLE_SUPPORT_MIN = 1
-SAMPLE_SUPPORT_MAX = 8
 
 
 # =============================================================================
@@ -107,8 +108,11 @@ def parse_args():
     parser.add_argument(
         "--sample-support-max",
         type=float,
-        default=SAMPLE_SUPPORT_MAX,
-        help="Maximum value for color scale."
+        default=None,
+        help=(
+            "Maximum value for color scale. "
+            "If omitted, it is inferred from the maximum SAMPLE_SUPP value."
+        )
     )
 
     parser.add_argument(
@@ -154,7 +158,7 @@ def safe_int(x):
     try:
         if x in [None, ".", ""]:
             return np.nan
-        return int(float(x))
+        return int(float(str(x).split(",")[0]))
     except Exception:
         return np.nan
 
@@ -163,8 +167,13 @@ def color_for_mean_sample_supp(mean_sample_supp, cmap_name, vmin, vmax):
     if pd.isna(mean_sample_supp):
         return "#BDBDBD"
 
+    if vmax <= vmin:
+        vmax = vmin + 1
+
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-    cmap = cm.get_cmap(cmap_name)
+
+    # Compatible with newer Matplotlib versions.
+    cmap = plt.get_cmap(cmap_name)
 
     return cmap(norm(float(mean_sample_supp)))
 
@@ -173,12 +182,70 @@ def reorder_vec(vec):
     return "".join(vec[i] for i in DISPLAY_ORDER)
 
 
+def write_empty_outputs(out_dir, out_prefix, reason):
+    os.makedirs(out_dir, exist_ok=True)
+
+    variant_tsv = os.path.join(out_dir, "toolref_variant_support_table.tsv")
+    intersections_tsv = os.path.join(out_dir, "toolref_upset_intersections.tsv")
+    set_sizes_tsv = os.path.join(out_dir, "toolref_upset_set_sizes.tsv")
+
+    pd.DataFrame({"reason": [reason]}).to_csv(
+        variant_tsv,
+        sep="\t",
+        index=False,
+    )
+
+    pd.DataFrame({"reason": [reason]}).to_csv(
+        intersections_tsv,
+        sep="\t",
+        index=False,
+    )
+
+    pd.DataFrame({
+        "set": SET_LABELS,
+        "size": [0] * len(SET_LABELS),
+    }).to_csv(
+        set_sizes_tsv,
+        sep="\t",
+        index=False,
+    )
+
+    png = os.path.join(out_dir, out_prefix + ".png")
+    pdf = os.path.join(out_dir, out_prefix + ".pdf")
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.text(
+        0.5,
+        0.5,
+        reason,
+        ha="center",
+        va="center",
+        wrap=True,
+        fontsize=12,
+    )
+    ax.axis("off")
+    fig.tight_layout()
+    fig.savefig(png, dpi=300, bbox_inches="tight")
+    fig.savefig(pdf, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    print("No valid UpSet data found. Placeholder outputs written:")
+    print(png)
+    print(pdf)
+    print(variant_tsv)
+    print(intersections_tsv)
+    print(set_sizes_tsv)
+
+
 # =============================================================================
 # LOAD
 # =============================================================================
 
 def load_toolref_patterns(vcf):
     rows = []
+
+    if not os.path.exists(vcf):
+        raise FileNotFoundError(vcf)
 
     with open_vcf(vcf) as fh:
         for line in fh:
@@ -197,7 +264,11 @@ def load_toolref_patterns(vcf):
                 continue
 
             vec = str(vec).strip()
+
             if len(vec) != 6:
+                continue
+
+            if not all(x in {"0", "1"} for x in vec):
                 continue
 
             rows.append({
@@ -269,6 +340,10 @@ def plot_upset(
     title,
 ):
     n = len(intersections)
+
+    if n == 0:
+        raise RuntimeError("No intersections to plot.")
+
     x = np.arange(n)
 
     fig = plt.figure(figsize=(24, 10))
@@ -298,7 +373,7 @@ def plot_upset(
         align="center"
     )
 
-    ymax = intersections["intersection_size"].max() * 1.18
+    ymax = max(intersections["intersection_size"].max() * 1.18, 1)
     ax_bar.set_ylim(0, ymax)
 
     left_pad = 0.85
@@ -324,10 +399,14 @@ def plot_upset(
     ax_bar.spines["top"].set_visible(False)
     ax_bar.spines["right"].set_visible(False)
 
+    if vmax <= vmin:
+        vmax = vmin + 1
+
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.get_cmap(cmap_name)
 
     sm = cm.ScalarMappable(
-        cmap=cm.get_cmap(cmap_name),
+        cmap=cmap,
         norm=norm
     )
     sm.set_array([])
@@ -341,8 +420,9 @@ def plot_upset(
 
     cbar.set_label("Mean sample support", fontsize=10)
 
-    if vmin == 1 and vmax == 8:
-        cbar.set_ticks(range(1, 9))
+    if float(vmin).is_integer() and float(vmax).is_integer():
+        if vmax - vmin <= 20:
+            cbar.set_ticks(range(int(vmin), int(vmax) + 1))
 
     y = np.arange(N_SETS)
 
@@ -366,7 +446,7 @@ def plot_upset(
     ax_sets.spines["right"].set_visible(False)
     ax_sets.spines["left"].set_visible(False)
 
-    xmax_sets = set_sizes["size"].max()
+    xmax_sets = max(set_sizes["size"].max(), 1)
     ax_sets.set_xlim(xmax_sets * 1.15, 0)
 
     for yi, val in zip(y, set_sizes["size"]):
@@ -451,20 +531,36 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
 
+    out_prefix = os.path.join(args.out_dir, args.out_prefix)
+
     df = load_toolref_patterns(args.vcf)
 
     if df.empty:
-        raise RuntimeError(
-            "No variants with TOOLREF_SUPP_VEC found. "
-            "Check that the input VCF is the annotated integrated GRCh38 cohort."
+        write_empty_outputs(
+            out_dir=args.out_dir,
+            out_prefix=args.out_prefix,
+            reason=(
+                "No variants with TOOLREF_SUPP_VEC found. "
+                "Check that the input VCF is the annotated integrated GRCh38 cohort."
+            )
         )
+        return
+
+    if args.sample_support_max is None:
+        inferred_max = df["SAMPLE_SUPP"].dropna().max()
+        if pd.isna(inferred_max):
+            sample_support_max = args.sample_support_min + 1
+        else:
+            sample_support_max = max(float(inferred_max), args.sample_support_min + 1)
+    else:
+        sample_support_max = args.sample_support_max
 
     intersections, set_sizes = summarize_intersections(
         df=df,
         top_n=args.top_n,
         cmap_name=args.cmap,
         vmin=args.sample_support_min,
-        vmax=args.sample_support_max,
+        vmax=sample_support_max,
     )
 
     df.to_csv(
@@ -485,15 +581,13 @@ def main():
         index=False
     )
 
-    out_prefix = os.path.join(args.out_dir, args.out_prefix)
-
     plot_upset(
         intersections=intersections,
         set_sizes=set_sizes,
         out_prefix=out_prefix,
         cmap_name=args.cmap,
         vmin=args.sample_support_min,
-        vmax=args.sample_support_max,
+        vmax=sample_support_max,
         title=args.title,
     )
 
@@ -502,6 +596,9 @@ def main():
     print(out_prefix + ".pdf")
     print()
     print("Total variants with TOOLREF_SUPP_VEC:", len(df))
+    print("Sample support color scale:")
+    print(f"  min: {args.sample_support_min}")
+    print(f"  max: {sample_support_max}")
     print()
     print("Top intersections:")
     print(intersections.head(15).to_string(index=False))

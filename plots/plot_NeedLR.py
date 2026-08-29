@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 needLR annotation burden and support plots
 ------------------------------------------
@@ -16,6 +18,13 @@ Output:
 
 This script uses pure Python parsing of the VCF.
 No bcftools required.
+
+This version supports dynamic carrier-count plotting:
+  - --min-carriers
+  - --max-carriers
+
+If --max-carriers is not provided, the maximum observed carrier count
+in the needLR VCF is used.
 """
 
 import os
@@ -92,6 +101,23 @@ def parse_args():
         "--title",
         default="needLR annotation burden and support",
         help="Main figure title."
+    )
+
+    parser.add_argument(
+        "--min-carriers",
+        type=int,
+        default=1,
+        help="Minimum carrier count to show in the carrier-count panel."
+    )
+
+    parser.add_argument(
+        "--max-carriers",
+        type=int,
+        default=None,
+        help=(
+            "Maximum carrier count to show in the carrier-count panel. "
+            "If omitted, inferred from the maximum observed carrier count."
+        )
     )
 
     return parser.parse_args()
@@ -200,6 +226,7 @@ def infer_control_af(info):
     Try several possible needLR control frequency fields.
     Returns ALL/global control allele/population frequency when present.
     """
+
     candidate_keys = [
         "Pop_Freq_ALL",
         "Allele_Freq_ALL",
@@ -223,6 +250,7 @@ def infer_carrier_count(info):
     Prefer cohort population count.
     Fall back to cohort allele count if needed.
     """
+
     candidate_keys = [
         "Pop_Count_Cohort",
         "Cohort_Pop_Count",
@@ -417,7 +445,16 @@ def build_burden_tables(df):
 # PLOT
 # =============================================================================
 
-def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix, title):
+def plot_needlr_burden(
+    burden,
+    known_novel,
+    context,
+    carrier,
+    out_prefix,
+    title,
+    min_carriers=1,
+    max_carriers=None,
+):
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
     fig.subplots_adjust(
@@ -534,27 +571,58 @@ def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix, title)
     style_ax(ax)
 
     carrier_plot = carrier.copy()
-    carrier_plot = carrier_plot[
-        (carrier_plot["carrier_count"] >= 1) &
-        (carrier_plot["carrier_count"] <= 8)
-    ]
 
-    x = np.arange(len(carrier_plot))
+    if carrier_plot.empty:
+        ax.text(
+            0.5,
+            0.5,
+            "No carrier count data available",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        ax.set_axis_off()
+    else:
+        if max_carriers is None:
+            max_carriers = int(carrier_plot["carrier_count"].max())
 
-    ax.bar(
-        x,
-        carrier_plot["count"],
-        color=COLORS["Carrier"],
-        edgecolor="none",
-        alpha=0.95,
-    )
+        carrier_plot = carrier_plot[
+            (carrier_plot["carrier_count"] >= min_carriers) &
+            (carrier_plot["carrier_count"] <= max_carriers)
+        ].copy()
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(carrier_plot["carrier_count"].astype(str))
-    ax.set_xlabel("Number of carriers")
-    ax.set_ylabel("Number of SVs")
-    ax.yaxis.set_major_formatter(FuncFormatter(fmt_int))
-    ax.set_title("D  Carrier count distribution", loc="left", fontweight="bold", fontsize=14)
+        if carrier_plot.empty:
+            ax.text(
+                0.5,
+                0.5,
+                f"No carrier counts in range {min_carriers}-{max_carriers}",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_axis_off()
+        else:
+            x = np.arange(len(carrier_plot))
+
+            ax.bar(
+                x,
+                carrier_plot["count"],
+                color=COLORS["Carrier"],
+                edgecolor="none",
+                alpha=0.95,
+            )
+
+            ax.set_xticks(x)
+            ax.set_xticklabels(carrier_plot["carrier_count"].astype(str))
+            ax.set_xlabel("Number of carriers")
+            ax.set_ylabel("Number of SVs")
+            ax.yaxis.set_major_formatter(FuncFormatter(fmt_int))
+            ax.set_title(
+                f"D  Carrier count distribution ({min_carriers}-{max_carriers})",
+                loc="left",
+                fontweight="bold",
+                fontsize=14,
+            )
 
     # -------------------------------------------------------------------------
     # Shared legend and title
@@ -594,6 +662,12 @@ def plot_needlr_burden(burden, known_novel, context, carrier, out_prefix, title)
 def main():
     args = parse_args()
 
+    if args.min_carriers < 1:
+        raise ValueError("--min-carriers must be >= 1")
+
+    if args.max_carriers is not None and args.max_carriers < args.min_carriers:
+        raise ValueError("--max-carriers must be >= --min-carriers")
+
     os.makedirs(args.out_dir, exist_ok=True)
 
     print("Loading needLR VCF:")
@@ -606,6 +680,20 @@ def main():
     print(df["SVTYPE"].value_counts().to_string())
 
     burden, known_novel, context, carrier = build_burden_tables(df)
+
+    inferred_max_carriers = None
+
+    if not carrier.empty:
+        inferred_max_carriers = int(carrier["carrier_count"].max())
+
+    effective_max_carriers = (
+        args.max_carriers
+        if args.max_carriers is not None
+        else inferred_max_carriers
+    )
+
+    if effective_max_carriers is None:
+        effective_max_carriers = args.min_carriers
 
     out_prefix = os.path.join(args.out_dir, args.out_prefix)
 
@@ -646,6 +734,8 @@ def main():
         carrier=carrier,
         out_prefix=out_prefix,
         title=args.title,
+        min_carriers=args.min_carriers,
+        max_carriers=effective_max_carriers,
     )
 
     print()

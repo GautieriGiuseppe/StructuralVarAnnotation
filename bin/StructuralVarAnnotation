@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,6 +12,11 @@ DRYRUN=0
 SLURM=0
 CLUSTER_JOBS=0
 PARTITION="cpuq"
+TARGETS=()
+TRIO=0
+UNLOCK=0
+SNAKEMAKE_MODULE="snakemake/9.6.3-python-3.11.5"
+CONDA_BIN=""
 
 usage() {
     cat <<EOF
@@ -24,23 +30,31 @@ Required:
   --outdir DIR          Output directory
 
 Options:
-  --config FILE         Config YAML [default: repo config.yml]
-  --jobs N              Number of Snakemake jobs [default: 100]
-  --slurm               Submit the Snakemake controller with sbatch
-  --cluster-jobs        Internal/developer option: submit workflow rules with sbatch
-  --partition NAME      SLURM partition [default: cpu]
-  --dry-run             Dry run only
-  --help                Show this help
+  --config FILE            Config YAML [default: repo config.yml]
+  --jobs N                 Number of Snakemake jobs [default: 100]
+  --slurm                  Submit the Snakemake controller with sbatch
+  --cluster-jobs           Internal/developer option: submit workflow rules with sbatch
+  --partition NAME         SLURM partition [default: cpuq]
+  --dry-run                Dry run only
+  --target NAME            Snakemake target/rule to run instead of default rule all. Can be used multiple times.
+  --trio                   Run trio/family needLR comparator mode instead of default cohort annotate
+  --unlock                 Remove a stale Snakemake lock and exit
+  --snakemake-module NAME  Module to load for Snakemake [default: snakemake]
+  --conda-bin DIR          Optional directory containing conda executable. If provided, it is prepended to PATH.
+  --help                   Show this help
 
 Examples:
   Direct/local Snakemake:
-    bin/StructuralVarAnnotation.sh --samples samples.tsv --outdir results/test_run
+    bin/StructuralVarAnnotation --samples samples.tsv --outdir results/test_run
 
   Submit full controller to SLURM and submit workflow rules as SLURM jobs:
-    bin/StructuralVarAnnotation.sh --samples samples.tsv --outdir results/test_run --slurm --jobs 200
+    bin/StructuralVarAnnotation --samples samples.tsv --outdir results/test_run --slurm --jobs 200
 
   Run controller in current shell but submit workflow rules to SLURM:
-    bin/StructuralVarAnnotation.sh --samples samples.tsv --outdir results/test_run --cluster-jobs --jobs 200
+    bin/StructuralVarAnnotation --samples samples.tsv --outdir results/test_run --cluster-jobs --jobs 200
+
+  Run optional WhatsHap haplotyping:
+    bin/StructuralVarAnnotation --samples samples.tsv --outdir results/test_run --target all_haplotype_grch38 
 EOF
 }
 
@@ -62,6 +76,14 @@ while [[ $# -gt 0 ]]; do
             JOBS="$2"
             shift 2
             ;;
+        --target)
+            TARGETS+=("$2")
+            shift 2
+            ;;
+        --trio)
+            TRIO=1
+            shift
+            ;;
         --slurm)
             SLURM=1
             shift
@@ -74,9 +96,21 @@ while [[ $# -gt 0 ]]; do
             PARTITION="$2"
             shift 2
             ;;
+        --unlock)
+            UNLOCK=1
+            shift
+            ;;    
         --dry-run)
             DRYRUN=1
             shift
+            ;;
+        --snakemake-module)
+            SNAKEMAKE_MODULE="$2"
+            shift 2
+            ;;
+        --conda-bin)
+            CONDA_BIN="$2"
+            shift 2
             ;;
         --help|-h)
             usage
@@ -112,7 +146,123 @@ if [[ ! -f "$CONFIG" ]]; then
     exit 1
 fi
 
+OUTDIR="${OUTDIR%/}"
+
+if [[ -n "$CONDA_BIN" ]]; then
+    CONDA_BIN="${CONDA_BIN%/}"
+fi
+
+if [[ -n "$CONDA_BIN" ]]; then
+    if [[ ! -x "${CONDA_BIN}/conda" ]]; then
+        echo "ERROR: --conda-bin does not contain executable conda: ${CONDA_BIN}/conda" >&2
+        exit 1
+    fi
+
+    export PATH="${CONDA_BIN%/}:$PATH"
+
+    # Needed to avoid cluster Python/Spack pollution
+    unset PYTHONPATH
+    unset PYTHONHOME
+
+    # Needed if you want libmamba
+    unset CONDA_NO_PLUGINS
+    export CONDA_SOLVER=libmamba
+
+fi
+
+PYTHON_BIN="python"
+
+if [[ -n "$CONDA_BIN" ]]; then
+    PYTHON_BIN="${CONDA_BIN}/python"
+fi
+
+if [[ "$TRIO" -eq 1 ]]; then
+    "$PYTHON_BIN" - "$CONFIG" <<'PY'
+import sys
+import yaml
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+cfg = yaml.safe_load(config_path.read_text())
+
+trio_file = cfg.get("needlr", {}).get("trio_file")
+if not trio_file:
+    sys.exit("ERROR: --trio requires needlr.trio_file in config.yml")
+
+if not Path(trio_file).exists():
+    sys.exit(f"ERROR: --trio trio_file does not exist: {trio_file}")
+PY
+
+    TARGETS+=("all_trio")
+fi
+
+
+load_modules() {
+    if [[ -z "$CONDA_BIN" ]]; then
+        if command -v module >/dev/null 2>&1; then
+            module load "$SNAKEMAKE_MODULE"
+        elif [[ -f /etc/profile.d/modules.sh ]]; then
+            source /etc/profile.d/modules.sh
+            module load "$SNAKEMAKE_MODULE"
+        else
+            echo "WARNING: module command not available. Assuming snakemake is already in PATH." >&2
+        fi
+    fi
+
+    if [[ -n "$CONDA_BIN" ]]; then
+        if [[ ! -x "$CONDA_BIN/conda" ]]; then
+            echo "ERROR: --conda-bin does not contain an executable conda: $CONDA_BIN/conda" >&2
+            exit 1
+        fi
+
+        export PATH="$CONDA_BIN:$PATH"
+        unset PYTHONPATH
+        unset PYTHONHOME
+        unset CONDA_NO_PLUGINS
+        export CONDA_SOLVER=libmamba
+    fi
+
+    echo "Using Snakemake:"
+    which snakemake
+    snakemake --version
+
+    echo "Using conda:"
+    which conda || true
+    conda --version || true
+}
+
+
 mkdir -p "$OUTDIR" "$OUTDIR/logs" "$REPO_DIR/logs"
+
+
+if [[ "$UNLOCK" -eq 1 ]]; then
+
+    load_modules
+
+    echo "Unlocking Snakemake working directory:"
+    echo "  repo:    $REPO_DIR"
+    echo "  samples: $SAMPLES"
+    echo "  config:  $CONFIG"
+    echo "  outdir:  $OUTDIR"
+    echo
+
+    UNLOCK_CMD=(
+        snakemake
+        -s "$REPO_DIR/workflow_master.smk"
+        --configfile "$CONFIG"
+        --config
+            "samples=$SAMPLES"
+            "output=${OUTDIR%/}"
+        --unlock
+    )
+
+    if [[ "${#TARGETS[@]}" -gt 0 ]]; then
+        UNLOCK_CMD+=("${TARGETS[@]}")
+    fi
+
+    "${UNLOCK_CMD[@]}"
+fi
+
 
 # ---------------------------------------------------------------------
 # Submit controller job to SLURM
@@ -121,9 +271,13 @@ if [[ "$SLURM" -eq 1 ]]; then
     export SVA_REPO_DIR="$REPO_DIR"
     export SVA_SAMPLES="$SAMPLES"
     export SVA_CONFIG="$CONFIG"
-    export SVA_OUTDIR="$OUTDIR"
+    export SVA_OUTDIR="${OUTDIR%/}"
     export SVA_JOBS="$JOBS"
+    export SVA_TARGETS="${TARGETS[*]}"
     export SVA_PARTITION="$PARTITION"
+    export SVA_SNAKEMAKE_MODULE="$SNAKEMAKE_MODULE"
+    export SVA_CONDA_BIN="${CONDA_BIN%/}"
+    export SVA_DRYRUN="$DRYRUN"
 
     echo "Submitting StructuralVarAnnotation controller to SLURM:"
     echo "  samples:   $SVA_SAMPLES"
@@ -140,6 +294,9 @@ fi
 # ---------------------------------------------------------------------
 # Run Snakemake controller directly
 # ---------------------------------------------------------------------
+
+load_modules
+
 CMD=(
     snakemake
     -s "$REPO_DIR/workflow_master.smk"
@@ -148,7 +305,6 @@ CMD=(
         "samples=$SAMPLES"
         "output=$OUTDIR"
     --use-conda
-    --conda-frontend mamba
     --rerun-incomplete
     --latency-wait 120
     --printshellcmds
@@ -157,13 +313,20 @@ CMD=(
 
 if [[ "$CLUSTER_JOBS" -eq 1 ]]; then
     CMD+=(
-        --cluster
-        "sbatch --partition=${PARTITION} --cpus-per-task={threads} --mem={resources.mem_mb}M --time={resources.time} --output=${OUTDIR}/logs/%x_%j.out --error=${OUTDIR}/logs/%x_%j.err"
+        --executor cluster-generic
+        --cluster-generic-submit-cmd
+        "sbatch --parsable --partition=${PARTITION} --job-name=SVA_{rule} --cpus-per-task={threads} --mem={resources.mem_mb}M --time={resources.time} --output=${OUTDIR}/logs/%x_%j.out --error=${OUTDIR}/logs/%x_%j.err"
+        --cluster-generic-cancel-cmd
+        "scancel"
     )
 fi
 
 if [[ "$DRYRUN" -eq 1 ]]; then
     CMD+=(-n)
+fi
+
+if [[ "${#TARGETS[@]}" -gt 0 ]]; then
+    CMD+=("${TARGETS[@]}")
 fi
 
 echo "Repository:   $REPO_DIR"

@@ -38,4 +38,6 @@ survivor: "SURVIVOR"
 
 needlr:
   outdir: "needLR_output"
+  trio_file: "trios.tsv"
+
 

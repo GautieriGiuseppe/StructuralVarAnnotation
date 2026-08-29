@@ -1,4 +1,4 @@
-
+import argparse
 import os
 import re
 import gzip
@@ -425,8 +425,8 @@ def add_median_p90(ax, values, x_offset_frac=0.01):
     return median, p90
 
 
-def plot_distributions(df):
-    os.makedirs(OUT_DIR, exist_ok=True)
+def plot_distributions(df, out_dir, out_prefix):
+    os.makedirs(out_dir, exist_ok=True)
 
     pos = df["breakpoint_diff"].dropna().astype(float)
     svlen = df["svlen_diff"].dropna().astype(float)
@@ -494,8 +494,8 @@ def plot_distributions(df):
 
     fig.tight_layout()
 
-    out_png = os.path.join(OUT_DIR, OUT_PREFIX + ".png")
-    out_pdf = os.path.join(OUT_DIR, OUT_PREFIX + ".pdf")
+    out_png = os.path.join(out_dir, out_prefix + ".png")
+    out_pdf = os.path.join(out_dir, out_prefix + ".pdf")
 
     fig.savefig(out_png, dpi=300, bbox_inches="tight")
     fig.savefig(out_pdf, dpi=300, bbox_inches="tight")
@@ -520,8 +520,8 @@ def plot_distributions(df):
         },
     ])
 
-    out_table = os.path.join(OUT_DIR, OUT_PREFIX + "_table.tsv")
-    out_summary = os.path.join(OUT_DIR, OUT_PREFIX + "_summary.tsv")
+    out_table = os.path.join(out_dir, out_prefix + "_table.tsv")
+    out_summary = os.path.join(out_dir, out_prefix + "_summary.tsv")
 
     df.to_csv(out_table, sep="\t", index=False)
     summary.to_csv(out_summary, sep="\t", index=False)
@@ -540,9 +540,51 @@ def plot_distributions(df):
 # MAIN
 # =============================================================================
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Plot native GRCh38 vs lifted CHM13 breakpoint/SVLEN support distances."
+    )
+
+    parser.add_argument(
+        "--vcf",
+        default=VCF,
+        help="Integrated GRCh38 cohort VCF.gz."
+    )
+
+    parser.add_argument(
+        "--metadata",
+        default=METADATA,
+        help="Tool/reference metadata TSV."
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default=OUT_DIR,
+        help="Output directory."
+    )
+
+    parser.add_argument(
+        "--out-prefix",
+        default=OUT_PREFIX,
+        help="Output file prefix."
+    )
+
+    return parser.parse_args()
+
+
 def main():
-    df = load_native_lifted_distances(VCF, METADATA)
-    plot_distributions(df)
+    args = parse_args()
+
+    df = load_native_lifted_distances(
+        vcf_path=args.vcf,
+        metadata_path=args.metadata
+    )
+
+    plot_distributions(
+        df=df,
+        out_dir=args.out_dir,
+        out_prefix=args.out_prefix
+    )
 
 
 if __name__ == "__main__":
