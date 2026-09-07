@@ -21,9 +21,10 @@ Main chapters:
   4. Cohort SV construction
   5. Tool/reference support UpSet
   6. needLR annotation / trio comparator annotation
-  7. GRCh38/CHM13 cross-reference confirmation
-  8. Native/lifted breakpoint and SVLEN distance
-  9. Output files
+  7. needLR trio exploration, in trio mode
+  8. GRCh38/CHM13 cross-reference confirmation
+  9. Native/lifted breakpoint and SVLEN distance
+  10. Output files
 """
 
 import os
@@ -236,18 +237,28 @@ def read_table(path, max_rows=None):
     return df
 
 
+def scroll_table_html(table_html):
+    return f"""
+    <div class="table-scroll">
+      {table_html}
+    </div>
+    """
+
+
 def dataframe_to_html(df, max_rows=12, index=False):
     if df is None or df.empty:
         return "<p class='note'>No table available.</p>"
 
     display = df.head(max_rows).copy()
 
-    return display.to_html(
+    table = display.to_html(
         index=index,
         border=0,
         classes="data-table",
         escape=True
     )
+
+    return scroll_table_html(table)
 
 
 def compact_table_html(df, max_rows=12, drop_columns=None):
@@ -265,12 +276,14 @@ def compact_table_html(df, max_rows=12, drop_columns=None):
     if len(d) > max_rows:
         d = d.head(max_rows)
 
-    return d.to_html(
+    table = d.to_html(
         index=False,
         classes="data-table",
         border=0,
         escape=True
     )
+
+    return scroll_table_html(table)
 
 
 def collapsed_table_html(title, df, max_rows=20, drop_columns=None):
@@ -281,7 +294,7 @@ def collapsed_table_html(title, df, max_rows=20, drop_columns=None):
 
     if drop_columns:
         d = d.drop(
-            columns=[c for c in drop_columns if c in d.columns],
+            columns=[c for c in d.columns if c in drop_columns],
             errors="ignore"
         )
 
@@ -302,7 +315,7 @@ def collapsed_table_html(title, df, max_rows=20, drop_columns=None):
     <details>
       <summary>{html_escape(title)}</summary>
       {note}
-      {table}
+      {scroll_table_html(table)}
     </details>
     """
 
@@ -575,21 +588,116 @@ def build_global_read_qc_discovery(cohort_results_dir):
     return pd.DataFrame(rows)
 
 
-def build_alignment_qc_discovery(samples_df, workflow_outdir):
-    patterns = [
+def alignment_qc_patterns():
+    return [
+        # Current pipeline layout: <outdir>/<batch>/<sample>/02.alignqc/<ref>/...
+        "**/02.alignqc/**/*.alfred.tsv.gz",
+        "**/02.alignqc/**/*alfred*.tsv.gz",
+        "**/02.alignqc/**/*alfred*.tsv",
+        "**/02.alignqc/**/*alfred*.txt",
+        "**/02.alignqc/**/*alfred*.png",
+
+        "**/02.alignqc/**/*.mosdepth.global.dist.txt",
+        "**/02.alignqc/**/*.mosdepth.region.dist.txt",
+        "**/02.alignqc/**/*.mosdepth.summary.txt",
+        "**/02.alignqc/**/*mosdepth*.txt",
+        "**/02.alignqc/**/*.regions.bed.gz",
+        "**/02.alignqc/**/*.regions.bed.gz.csi",
+
+        # Optional samtools-style QC outputs
+        "**/02.alignqc/**/*flagstat*",
+        "**/02.alignqc/**/*idxstats*",
+        "**/02.alignqc/**/*samtools*stats*.txt",
+        "**/02.alignqc/**/*.bam.stats",
+        "**/02.alignqc/**/*.bam.flagstat",
+        "**/02.alignqc/**/*.bam.idxstats",
+
+        # Backward-compatible / generic patterns
         "**/*alfred*.png",
+        "**/*alfred*.tsv.gz",
         "**/*alfred*.tsv",
         "**/*alfred*.txt",
         "**/*flagstat*",
         "**/*idxstats*",
         "**/*.bam.stats",
+        "**/*.bam.flagstat",
+        "**/*.bam.idxstats",
+        "**/*.bam.mosdepth.summary.txt",
         "**/*mosdepth*summary*.txt",
         "**/*mosdepth*.global.dist.txt",
+        "**/*mosdepth*.region.dist.txt",
+        "**/*mosdepth*.per-base.bed.gz",
+        "**/*mosdepth*.thresholds.bed.gz",
+        "**/*.regions.bed.gz",
+        "**/*.regions.bed.gz.csi",
         "**/*coverage*.txt",
         "**/*coverage*.tsv",
         "**/*coverage*.png",
+        "**/*depth*.txt",
+        "**/*depth*.tsv",
+        "**/*depth*.png",
+        "**/*alignment*q*.txt",
+        "**/*alignment*q*.tsv",
+        "**/*alignment*q*.png",
+        "**/*align*q*.txt",
+        "**/*align*q*.tsv",
+        "**/*align*q*.png",
+        "**/*multiqc*.html",
+        "**/*multiqc*.txt",
+        "**/*multiqc*.tsv",
     ]
 
+def discover_sample_alignment_qc_files(sample, batch, workflow_outdir, cohort_results_dir):
+    patterns = alignment_qc_patterns()
+
+    candidate_roots = [
+        os.path.join(workflow_outdir, batch, sample),
+        os.path.join(workflow_outdir, "alignment_qc", batch, sample),
+        os.path.join(workflow_outdir, "alignment_qc", sample),
+        os.path.join(cohort_results_dir, "alignment_qc", batch, sample),
+        os.path.join(cohort_results_dir, "alignment_qc", sample),
+        os.path.join(cohort_results_dir, "alignment_qc"),
+        os.path.join(cohort_results_dir, "align_qc"),
+        os.path.join(cohort_results_dir, "alignment"),
+    ]
+
+    hits = []
+
+    for root in candidate_roots:
+        if os.path.exists(root):
+            hits.extend(discover_files(root, patterns))
+
+    # Fallback for layouts where alignment QC files are placed outside a
+    # per-sample directory, but still contain the sample ID in the filename/path.
+    # This keeps the report robust across old and new pipeline layouts.
+    if not hits:
+        sample_patterns = [
+            f"**/*{sample}*flagstat*",
+            f"**/*{sample}*idxstats*",
+            f"**/*{sample}*mosdepth*",
+            f"**/*{sample}*coverage*",
+            f"**/*{sample}*depth*",
+            f"**/*{sample}*alfred*",
+            f"**/*{sample}*alignment*q*",
+            f"**/*{sample}*align*q*",
+        ]
+
+        fallback_roots = [
+            workflow_outdir,
+            cohort_results_dir,
+            os.path.join(cohort_results_dir, "alignment_qc"),
+            os.path.join(cohort_results_dir, "align_qc"),
+        ]
+
+        for root in fallback_roots:
+            if os.path.exists(root):
+                hits.extend(discover_files(root, sample_patterns))
+
+    hits = sorted(set(x for x in hits if os.path.isfile(x)))
+    return hits
+
+
+def build_alignment_qc_discovery(samples_df, workflow_outdir, cohort_results_dir):
     rows = []
 
     for _, row in samples_df.iterrows():
@@ -597,17 +705,112 @@ def build_alignment_qc_discovery(samples_df, workflow_outdir):
         sample = str(row["sample_id"])
         sample_dir = os.path.join(workflow_outdir, batch, sample)
 
-        hits = discover_files(sample_dir, patterns) if os.path.exists(sample_dir) else []
+        hits = discover_sample_alignment_qc_files(
+            sample=sample,
+            batch=batch,
+            workflow_outdir=workflow_outdir,
+            cohort_results_dir=cohort_results_dir,
+        )
 
         rows.append({
             "batch_id": batch,
             "sample_id": sample,
+            "sample_dir": sample_dir,
             "sample_dir_exists": os.path.exists(sample_dir),
             "n_alignment_qc_files_detected": len(hits),
-            "example_files": "; ".join(relpath(x, workflow_outdir) for x in hits[:5]),
+            "example_files": "; ".join(relpath(x, workflow_outdir) for x in hits[:8]),
         })
 
     return pd.DataFrame(rows)
+
+
+
+
+
+def discover_mosdepth_summary_tables(workflow_outdir):
+    """Collect mosdepth summary rows across samples and references.
+
+    The current alignment-QC workflow writes files such as:
+      <outdir>/<batch>/<sample>/02.alignqc/<ref>/<sample>_<ref>.mosdepth.summary.txt
+
+    This helper parses all such files and annotates each row with batch, sample,
+    reference and relative file path so that the report shows content, not only
+    discovered filenames.
+    """
+    patterns = [
+        "**/02.alignqc/**/*.mosdepth.summary.txt",
+        "**/*mosdepth.summary.txt",
+    ]
+
+    hits = discover_files(workflow_outdir, patterns) if os.path.exists(workflow_outdir) else []
+    rows = []
+
+    for path in sorted(set(hits)):
+        parts = path.split(os.sep)
+
+        batch_id = "NA"
+        sample_id = "NA"
+        reference = "NA"
+
+        try:
+            idx = parts.index("02.alignqc")
+            reference = parts[idx + 1]
+            sample_id = parts[idx - 1]
+            batch_id = parts[idx - 2]
+        except Exception:
+            pass
+
+        try:
+            df = pd.read_csv(path, sep="\t")
+
+            if df.empty:
+                rows.append({
+                    "batch_id": batch_id,
+                    "sample_id": sample_id,
+                    "reference": reference,
+                    "file": relpath(path, workflow_outdir),
+                    "status": "empty",
+                })
+                continue
+
+            # Prefer the total/genome row when present; otherwise keep the first row.
+            chosen = df.iloc[0]
+            for col in df.columns:
+                if col.lower() in {"chrom", "chromosome", "contig"}:
+                    total_rows = df[df[col].astype(str).str.lower().isin(["total", "genome"])].copy()
+                    if not total_rows.empty:
+                        chosen = total_rows.iloc[0]
+                    break
+
+            row = chosen.to_dict()
+            row = {str(k): v for k, v in row.items()}
+            row.update({
+                "batch_id": batch_id,
+                "sample_id": sample_id,
+                "reference": reference,
+                "file": relpath(path, workflow_outdir),
+                "status": "ok",
+            })
+            rows.append(row)
+
+        except Exception as exc:
+            rows.append({
+                "batch_id": batch_id,
+                "sample_id": sample_id,
+                "reference": reference,
+                "file": relpath(path, workflow_outdir),
+                "status": f"read_error: {exc}",
+            })
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+
+    # Move metadata columns first, regardless of mosdepth version/column names.
+    front = [c for c in ["batch_id", "sample_id", "reference", "status", "file"] if c in df.columns]
+    rest = [c for c in df.columns if c not in front]
+    return df[front + rest]
 
 
 def discover_representative_read_qc_images(cohort_results_dir):
@@ -627,13 +830,29 @@ def discover_representative_read_qc_images(cohort_results_dir):
     return sorted(set(hits))[:16]
 
 
-def discover_representative_alignment_images(workflow_outdir):
+def discover_representative_alignment_images(workflow_outdir, cohort_results_dir=None):
     patterns = [
         "**/*alfred*.png",
         "**/*coverage*.png",
+        "**/*depth*.png",
+        "**/*alignment*q*.png",
+        "**/*align*q*.png",
     ]
 
-    hits = discover_files(workflow_outdir, patterns)
+    hits = []
+
+    if workflow_outdir and os.path.exists(workflow_outdir):
+        hits.extend(discover_files(workflow_outdir, patterns))
+
+    if cohort_results_dir and os.path.exists(cohort_results_dir):
+        for root in [
+            os.path.join(cohort_results_dir, "alignment_qc"),
+            os.path.join(cohort_results_dir, "align_qc"),
+            os.path.join(cohort_results_dir, "alignment"),
+        ]:
+            if os.path.exists(root):
+                hits.extend(discover_files(root, patterns))
+
     return sorted(set(hits))[:12]
 
 
@@ -705,7 +924,6 @@ def render_read_qc_section(
     global_read_qc_df,
     cohort_results_dir,
     report_dir,
-    multiqc_html=None,
 ):
     if read_qc_df is None or read_qc_df.empty:
         return "<p class='note'>No read QC discovery table was generated.</p>"
@@ -730,13 +948,6 @@ def render_read_qc_section(
       <b>{n_with_files:,}/{n_samples:,}</b>.
     </p>
     """
-
-    if multiqc_html:
-        html += link_button(
-            multiqc_html,
-            "Open full read QC MultiQC report",
-            report_dir
-        )
 
     if total_files == 0:
         html += """
@@ -781,7 +992,14 @@ def render_read_qc_section(
     return html
 
 
-def render_alignment_qc_section(alignment_qc_df, workflow_outdir):
+def render_alignment_qc_section(
+    alignment_qc_df,
+    workflow_outdir,
+    cohort_results_dir,
+    plot_paths=None,
+    tables=None,
+    max_rows=20,
+):
     if alignment_qc_df is None or alignment_qc_df.empty:
         return "<p class='note'>No alignment QC discovery table was generated.</p>"
 
@@ -808,6 +1026,17 @@ def render_alignment_qc_section(alignment_qc_df, workflow_outdir):
     </p>
     """
 
+    if total_files == 0:
+        html += missing_box(
+            "No alignment QC files detected",
+            (
+                "The report searched the per-sample output folders and common "
+                "cohort_results/alignment_qc locations. If alignment QC exists "
+                "under a different folder name, add that folder to "
+                "discover_sample_alignment_qc_files()."
+            )
+        )
+
     html += compact_table_html(compact, max_rows=100)
 
     html += collapsed_table_html(
@@ -817,18 +1046,85 @@ def render_alignment_qc_section(alignment_qc_df, workflow_outdir):
         drop_columns=None,
     )
 
-    alignment_images = discover_representative_alignment_images(workflow_outdir)
+    if plot_paths is not None:
+        html += """
+        <h3>Alignment QC summary plots</h3>
+        <details open>
+          <summary>Show coverage and mapping example figures</summary>
+        """
 
-    if alignment_images:
-        html += "<h3>Representative alignment QC images</h3>"
+        html += png_figure_html(
+            plot_paths.get("alignment_qc_alfred"),
+            "ALFRED mapping and alignment error metrics",
+            caption=(
+                "Comparison of GRCh38 and CHM13 mapping metrics parsed from "
+                "ALFRED outputs. BAM-derived unique mapping is skipped in the "
+                "standard report to avoid expensive full-BAM scans."
+            ),
+            cohort_results_dir=cohort_results_dir,
+        )
 
-        for path in alignment_images:
-            html += png_figure_html(
-                path,
-                title=relpath(path, workflow_outdir),
-                caption="Automatically discovered alignment QC image.",
-                cohort_results_dir=workflow_outdir,
-            )
+        html += png_figure_html(
+            plot_paths.get("alignment_qc_mosdepth"),
+            "mosdepth coverage summary",
+            caption=(
+                "Coverage summary across samples and references parsed from "
+                "mosdepth summary files."
+            ),
+            cohort_results_dir=cohort_results_dir,
+        )
+
+        html += png_figure_html(
+            plot_paths.get("alignment_qc_mosdepth_dist"),
+            "mosdepth global coverage distribution",
+            caption=(
+                "Genome-wide coverage distribution parsed from mosdepth "
+                "global distribution files."
+            ),
+            cohort_results_dir=cohort_results_dir,
+        )
+
+        html += png_figure_html(
+            plot_paths.get("alignment_qc_mosdepth_contig"),
+            "mosdepth coverage by contig",
+            caption=(
+                "Mean coverage by contig for the preserved representative sample "
+                "selected from the trio proband when a trio file is provided."
+            ),
+            cohort_results_dir=cohort_results_dir,
+        )
+
+        html += """
+        </details>
+        """
+
+    if tables is not None:
+        alfred_summary = read_table(tables.get("alignment_qc_alfred_summary"))
+        mosdepth_summary = read_table(tables.get("alignment_qc_mosdepth_summary"))
+        mosdepth_dist = read_table(tables.get("alignment_qc_mosdepth_dist"))
+
+        html += "<h3>Alignment QC summary tables</h3>"
+
+        html += collapsed_table_html(
+            "Show ALFRED mapping summary table",
+            alfred_summary,
+            max_rows=max_rows,
+            drop_columns=None,
+        )
+
+        html += collapsed_table_html(
+            "Show mosdepth coverage summary table",
+            mosdepth_summary,
+            max_rows=max_rows,
+            drop_columns=None,
+        )
+
+        html += collapsed_table_html(
+            "Show mosdepth global distribution table",
+            mosdepth_dist,
+            max_rows=max_rows,
+            drop_columns=None,
+        )
 
     return html
 
@@ -893,6 +1189,116 @@ def render_needlr_trio_section(needlr_trio_dir, max_rows=20):
     return html
 
 
+def render_needlr_trio_exploration_section(plot_paths, tables, cohort_results_dir, max_rows=20):
+    """
+    Render exploratory plots and tables generated from the needLR trio comparator VCF.
+
+    The section is optional and is only displayed in trio mode. Missing files are
+    shown as warning boxes so the report remains buildable while the rule is being
+    developed or when no candidate table is produced.
+    """
+
+    inheritance_counts = read_table(tables.get("trio_exploration_inheritance_counts"))
+    annotation_summary = read_table(tables.get("trio_exploration_annotation_summary"))
+    high_priority = read_table(tables.get("trio_exploration_high_priority"))
+    rare_denovo = read_table(tables.get("trio_exploration_rare_denovo"))
+    context_summary = read_table(tables.get("trio_exploration_context_summary"))
+
+    cards = []
+
+    if inheritance_counts is not None and not inheritance_counts.empty:
+        if "n_variants" in inheritance_counts.columns:
+            total_variants = inheritance_counts["n_variants"].sum()
+            cards.append(("Trio comparator SVs", format_int(total_variants)))
+
+        if {"Inheritance", "n_variants"}.issubset(inheritance_counts.columns):
+            denovo = inheritance_counts.loc[
+                inheritance_counts["Inheritance"].astype(str) == "de_novo",
+                "n_variants",
+            ]
+            if not denovo.empty:
+                cards.append(("De novo candidates", format_int(denovo.iloc[0])))
+
+    if high_priority is not None:
+        cards.append(("High-priority candidates", format_int(len(high_priority))))
+
+    if rare_denovo is not None:
+        cards.append(("Rare annotated de novo", format_int(len(rare_denovo))))
+
+    metric_html = metric_cards(cards) if cards else "<p class='note'>No trio exploration summary metrics available.</p>"
+
+    html = f"""
+    <p>
+      This section summarizes the trio-specific needLR comparator VCF. Variants are
+      stratified by inheritance class, SV type, proband and parental read support,
+      control-population frequency, functional annotation, and genomic-context flags.
+    </p>
+
+    <p>
+      Candidate prioritization is exploratory. Scores are based on inheritance,
+      rarity in controls, overlap with genes or disease resources, read support,
+      and genomic-context flags. These tables are intended for biological review,
+      not as validated clinical classifications.
+    </p>
+
+    {metric_html}
+
+    {png_figure_html(
+        plot_paths.get("trio_exploration_summary"),
+        "Trio inheritance, SVTYPE, read support and annotation burden",
+        caption=(
+            "Overview of inheritance classes, SVTYPE composition, proband/parental "
+            "alt-read fractions, and annotation burden by inheritance class."
+        ),
+        cohort_results_dir=cohort_results_dir,
+    )}
+
+    {png_figure_html(
+        plot_paths.get("trio_exploration_population"),
+        "Trio population frequency, SV size, candidate priority and genomic context",
+        caption=(
+            "Control population frequency, SVLEN distribution, exploratory priority "
+            "scores, and genomic-context flags for needLR trio comparator variants."
+        ),
+        cohort_results_dir=cohort_results_dir,
+    )}
+
+    <h3>Inheritance and annotation summary</h3>
+
+    <h4>Inheritance class counts</h4>
+    {dataframe_to_html(inheritance_counts, max_rows=max_rows)}
+
+    <h4>Annotation summary by inheritance class</h4>
+    {dataframe_to_html(annotation_summary, max_rows=max_rows)}
+
+    <h4>Genomic context summary</h4>
+    {dataframe_to_html(context_summary, max_rows=max_rows)}
+
+    <h3>Candidate tables</h3>
+
+    {collapsed_table_html(
+        "Show high-priority exploratory candidates",
+        high_priority,
+        max_rows=max_rows,
+        drop_columns=None,
+    )}
+
+    {collapsed_table_html(
+        "Show rare annotated de novo candidates",
+        rare_denovo,
+        max_rows=max_rows,
+        drop_columns=None,
+    )}
+
+    <table class="mini-table">
+      <tr><th>Exploration directory</th><td>{html_escape(os.path.join(cohort_results_dir, "needlr_trio_exploration"))}</td></tr>
+    </table>
+    """
+
+    return html
+
+
+
 # =============================================================================
 # REPORT BUILDING
 # =============================================================================
@@ -919,6 +1325,7 @@ def build_html_report(
 
     n_samples = samples_df["sample_id"].nunique()
     n_batches = samples_df["batch_id"].nunique()
+    carrier_count_label = f"1-{n_samples}"
 
     overview_metrics = [
         ("Samples", format_int(n_samples)),
@@ -977,7 +1384,6 @@ def build_html_report(
         global_read_qc_df=global_read_qc_df,
         cohort_results_dir=cohort_results_dir,
         report_dir=report_dir,
-        multiqc_html=html_paths.get("read_qc_multiqc"),
     )}
     """
 
@@ -987,7 +1393,7 @@ def build_html_report(
       outputs from Alfred, flagstat, idxstats, mosdepth, and coverage summaries
       when present.
     </p>
-    {render_alignment_qc_section(alignment_qc_df, workflow_outdir)}
+    {render_alignment_qc_section(alignment_qc_df, workflow_outdir, cohort_results_dir, plot_paths=plot_paths, tables=tables, max_rows=args.max_table_rows)}
     """
 
     svtype_df = pd.DataFrame(
@@ -1044,7 +1450,7 @@ def build_html_report(
         needlr_context = read_table(tables["needlr_context"])
         needlr_carriers = read_table(tables["needlr_carriers"])
         popfreq_summary = read_table(tables["needlr_popfreq_summary"])
-        carrier_1_8_summary = read_table(tables["carrier_1_8_summary"])
+        carrier_dynamic_summary = read_table(tables["carrier_dynamic_summary"])
 
         needlr_body = f"""
         <p>
@@ -1078,29 +1484,39 @@ def build_html_report(
         {dataframe_to_html(popfreq_summary, max_rows=20)}
 
         {png_figure_html(
-            plot_paths["carrier_1_8_present"],
-            "Control population frequency distributions for carrier counts 1-8, present variants",
+            plot_paths["carrier_dynamic_present"],
+            "Control population frequency distributions for carrier counts {carrier_count_label}, present variants",
             cohort_results_dir=cohort_results_dir
         )}
 
         {png_figure_html(
-            plot_paths["carrier_1_8_absent"],
-            "Control population frequency distributions for carrier counts 1-8, including absent variants",
+            plot_paths["carrier_dynamic_absent"],
+            "Control population frequency distributions for carrier counts {carrier_count_label}, including absent variants",
             cohort_results_dir=cohort_results_dir
         )}
 
         {png_figure_html(
-            plot_paths["carrier_1_8_summary"],
-            "Carrier count 1-8 population frequency trends",
+            plot_paths["carrier_dynamic_summary"],
+            "Carrier count {carrier_count_label} population frequency trends",
             cohort_results_dir=cohort_results_dir
         )}
 
-        <h3>Carrier count 1-8 summary</h3>
-        {dataframe_to_html(carrier_1_8_summary, max_rows=24)}
+        <h3>Carrier count {carrier_count_label} summary</h3>
+        {dataframe_to_html(carrier_dynamic_summary, max_rows=24)}
         """
 
         needlr_section_title = "needLR annotation and population frequency"
         needlr_toc_label = "needLR annotation and population frequency"
+
+    if args.mode == "trio":
+        trio_exploration_body = render_needlr_trio_exploration_section(
+            plot_paths=plot_paths,
+            tables=tables,
+            cohort_results_dir=cohort_results_dir,
+            max_rows=args.max_table_rows,
+        )
+    else:
+        trio_exploration_body = ""
 
     crossref_metrics = read_metrics_tsv(tables["crossref_metrics"])
     crossref_metrics_df = read_table(tables["crossref_metrics"])
@@ -1242,6 +1658,10 @@ def build_html_report(
     {dataframe_to_html(output_df, max_rows=200)}
     """
 
+    trio_exploration_toc = ""
+    if args.mode == "trio":
+        trio_exploration_toc = '<li><a href="#trio-exploration">needLR trio exploration</a></li>'
+
     toc = f"""
     <nav class="toc">
       <h2>Contents</h2>
@@ -1252,6 +1672,7 @@ def build_html_report(
         <li><a href="#cohort">Cohort SV construction</a></li>
         <li><a href="#upset">Tool/reference support UpSet</a></li>
         <li><a href="#needlr">{html_escape(needlr_toc_label)}</a></li>
+        {trio_exploration_toc}
         <li><a href="#crossref">GRCh38/CHM13 confirmation</a></li>
         <li><a href="#breakpoint">Breakpoint and SVLEN distance</a></li>
         <li><a href="#outputs">Output files</a></li>
@@ -1259,17 +1680,27 @@ def build_html_report(
     </nav>
     """
 
-    body = "\n".join([
+    body_sections = [
         section("Run overview", "overview", overview_body),
         section("Read QC", "read-qc", read_qc_body),
         section("Alignment QC", "alignment-qc", alignment_qc_body),
         section("Cohort SV construction", "cohort", cohort_body),
         section("Tool/reference support UpSet", "upset", upset_body),
         section(needlr_section_title, "needlr", needlr_body),
+    ]
+
+    if args.mode == "trio":
+        body_sections.append(
+            section("needLR trio exploration", "trio-exploration", trio_exploration_body)
+        )
+
+    body_sections.extend([
         section("GRCh38/CHM13 confirmation", "crossref", crossref_body),
         section("Breakpoint and SVLEN distance", "breakpoint", breakpoint_body),
         section("Output files", "outputs", outputs_body),
     ])
+
+    body = "\n".join(body_sections)
 
     css = """
     <style>
@@ -1428,11 +1859,24 @@ def build_html_report(
         font-style: italic;
       }
 
+      .table-scroll {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: visible;
+        margin: 16px 0;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: white;
+      }
+
       .data-table {
         border-collapse: collapse;
-        width: 100%;
+        width: max-content;
+        min-width: 100%;
+        max-width: none;
         font-size: 13px;
-        margin: 16px 0;
+        margin: 0;
       }
 
       .data-table th {
@@ -1442,13 +1886,14 @@ def build_html_report(
         text-align: left;
         position: sticky;
         top: 0;
+        white-space: nowrap;
       }
 
       .data-table td {
         border: 1px solid #e5e7eb;
         padding: 7px;
         vertical-align: top;
-        word-break: break-word;
+        white-space: nowrap;
       }
 
       .data-table tr:nth-child(even) {
@@ -1551,6 +1996,10 @@ def main():
         raise ValueError("--needlr-trio-dir is required when --mode trio")
 
     samples_df = load_samples(args.samples)
+    n_samples = samples_df["sample_id"].nunique()
+    carrier_count_dir = f"needlr_population_frequency_carriers_1_{n_samples}"
+    carrier_count_suffix = f"1_{n_samples}"
+    carrier_count_label = f"1-{n_samples}"
     sample_paths_df = classify_sample_paths(samples_df, workflow_outdir)
 
     read_qc_df = build_read_qc_discovery(
@@ -1564,6 +2013,7 @@ def main():
     alignment_qc_df = build_alignment_qc_discovery(
         samples_df=samples_df,
         workflow_outdir=workflow_outdir,
+        cohort_results_dir=cohort_results_dir,
     )
 
     cohort_summary = summarize_vcf(args.cohort_vcf)
@@ -1594,20 +2044,20 @@ def main():
             "needlr_annotation_plots",
             "needlr_control_population_frequency_summary.png"
         ),
-        "carrier_1_8_present": os.path.join(
+        "carrier_dynamic_present": os.path.join(
             cohort_results_dir,
-            "needlr_population_frequency_carriers_1_8",
-            "needlr_popfreq_violin_carrier_counts_1_8_present_only.png"
+            carrier_count_dir,
+            f"needlr_popfreq_violin_carrier_counts_{carrier_count_suffix}_present_only.png"
         ),
-        "carrier_1_8_absent": os.path.join(
+        "carrier_dynamic_absent": os.path.join(
             cohort_results_dir,
-            "needlr_population_frequency_carriers_1_8",
-            "needlr_popfreq_violin_carrier_counts_1_8_including_absent_variants.png"
+            carrier_count_dir,
+            f"needlr_popfreq_violin_carrier_counts_{carrier_count_suffix}_including_absent_variants.png"
         ),
-        "carrier_1_8_summary": os.path.join(
+        "carrier_dynamic_summary": os.path.join(
             cohort_results_dir,
-            "needlr_population_frequency_carriers_1_8",
-            "needlr_popfreq_carrier_counts_1_8_summary_lines.png"
+            carrier_count_dir,
+            f"needlr_popfreq_carrier_counts_{carrier_count_suffix}_summary_lines.png"
         ),
         "crossref_fig1": os.path.join(
             cohort_results_dir,
@@ -1629,6 +2079,26 @@ def main():
             "crossref_confirmation_from_integrated_GRCh38",
             "native_vs_lifted_support_distance",
             "native_grch38_vs_lifted_chm13_support_distance.png"
+        ),
+                "alignment_qc_alfred": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_alfred_mapping_unique.png"
+        ),
+        "alignment_qc_mosdepth": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_mosdepth_coverage_summary.png"
+        ),
+        "alignment_qc_mosdepth_dist": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_mosdepth_global_distribution.png"
+        ),
+        "alignment_qc_mosdepth_contig": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_mosdepth_contig_coverage.png"
         ),
     }
 
@@ -1668,10 +2138,10 @@ def main():
             "needlr_annotation_plots",
             "needlr_control_population_frequency_summary.tsv"
         ),
-        "carrier_1_8_summary": os.path.join(
+        "carrier_dynamic_summary": os.path.join(
             cohort_results_dir,
-            "needlr_population_frequency_carriers_1_8",
-            "needlr_popfreq_summary_carrier_counts_1_8.tsv"
+            carrier_count_dir,
+            f"needlr_popfreq_summary_carrier_counts_{carrier_count_suffix}.tsv"
         ),
         "crossref_table": os.path.join(
             cohort_results_dir,
@@ -1689,7 +2159,98 @@ def main():
             "native_vs_lifted_support_distance",
             "native_grch38_vs_lifted_chm13_support_distance_summary.tsv"
         ),
+                "alignment_qc_alfred_summary": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_alfred_mapping_summary.tsv"
+        ),
+        "alignment_qc_mosdepth_summary": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_mosdepth_summary.tsv"
+        ),
+        "alignment_qc_mosdepth_dist": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_mosdepth_global_distribution.tsv"
+        ),
+        "alignment_qc_mosdepth_contig": os.path.join(
+            cohort_results_dir,
+            "alignment_qc_plots",
+            "alignment_qc_mosdepth_contig_coverage.tsv"
+        ),
     }
+
+    if args.mode == "trio":
+        plot_paths.update({
+            "trio_exploration_summary": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_summary.png"
+            ),
+            "trio_exploration_population": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_population_priority.png"
+            ),
+        })
+
+        tables.update({
+            "trio_exploration_variant_table": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_variant_table.tsv"
+            ),
+            "trio_exploration_inheritance_counts": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_inheritance_counts.tsv"
+            ),
+            "trio_exploration_inheritance_svtype": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_inheritance_svtype_counts.tsv"
+            ),
+            "trio_exploration_annotation_summary": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_annotation_summary.tsv"
+            ),
+            "trio_exploration_context_summary": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_context_summary.tsv"
+            ),
+            "trio_exploration_high_priority": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_high_priority_candidates.tsv"
+            ),
+            "trio_exploration_rare_denovo": os.path.join(
+                cohort_results_dir,
+                "needlr_trio_exploration",
+                "needlr_trio_exploration_rare_de_novo_candidates.tsv"
+            ),
+        })
+
+        # Trio reports use needLR comparator outputs instead of standard cohort needLR plots.
+        for key in [
+            "needlr_burden",
+            "needlr_popfreq",
+            "carrier_dynamic_present",
+            "carrier_dynamic_absent",
+            "carrier_dynamic_summary",
+        ]:
+            plot_paths.pop(key, None)
+
+        for key in [
+            "needlr_burden",
+            "needlr_context",
+            "needlr_carriers",
+            "needlr_popfreq_summary",
+            "carrier_dynamic_summary",
+        ]:
+            tables.pop(key, None)
 
     summary_rows = []
 
@@ -1765,6 +2326,38 @@ def main():
                 "value": int(trio_df["n_comparator_output_files"].sum()) if trio_df is not None and not trio_df.empty else 0,
             },
         ])
+
+        trio_inheritance_counts = read_table(tables["trio_exploration_inheritance_counts"])
+        trio_high_priority = read_table(tables["trio_exploration_high_priority"])
+        trio_rare_denovo = read_table(tables["trio_exploration_rare_denovo"])
+
+        if trio_inheritance_counts is not None and not trio_inheritance_counts.empty:
+            if "n_variants" in trio_inheritance_counts.columns:
+                summary_rows.append({
+                    "section": "needlr_trio_exploration",
+                    "metric": "n_trio_exploration_variants",
+                    "value": int(trio_inheritance_counts["n_variants"].sum()),
+                })
+
+            if {"Inheritance", "n_variants"}.issubset(trio_inheritance_counts.columns):
+                for _, row in trio_inheritance_counts.iterrows():
+                    summary_rows.append({
+                        "section": "needlr_trio_exploration_inheritance",
+                        "metric": str(row["Inheritance"]),
+                        "value": row["n_variants"],
+                    })
+
+        summary_rows.append({
+            "section": "needlr_trio_exploration",
+            "metric": "n_high_priority_candidates",
+            "value": len(trio_high_priority) if trio_high_priority is not None else 0,
+        })
+
+        summary_rows.append({
+            "section": "needlr_trio_exploration",
+            "metric": "n_rare_annotated_de_novo_candidates",
+            "value": len(trio_rare_denovo) if trio_rare_denovo is not None else 0,
+        })
 
     for svtype, count in cohort_summary["svtype_counts"].items():
         summary_rows.append({
