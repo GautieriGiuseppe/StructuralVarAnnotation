@@ -13,7 +13,8 @@ with open(samples_file, "r") as f:
             fields = line.strip().split("\t")
             VALID_PAIRS.append((fields[batch_idx], fields[sample_idx]))
 
-OUTDIR = config["output"]
+OUTDIR = config["output"].rstrip("/")
+
 NEEDLR_OUTDIR = os.path.join(
     OUTDIR,
     config.get("needlr", {}).get("outdir", "needLR_output")
@@ -30,8 +31,11 @@ include: "variant_calling/needLR_trio_grch38.smk"
 include: "variant_calling/crossref_confirmation_grch38.smk"
 include: "variant_calling/qc_report_generator.smk"
 
+
 rule all:
     input:
+        rules.all_alignqc.input,
+
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
         f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
@@ -52,8 +56,11 @@ rule all:
         f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_report.html",
         f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_summary.tsv",
 
+
 rule all_trio:
     input:
+        rules.all_alignqc.input,
+
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
         f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
