@@ -12,7 +12,8 @@ OUTDIR = config["output"]
 
 rule sniffles_grch38:
     input:
-        sample=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/grch38/{{sample}}.srt.bam"
+        bam=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/grch38/{{sample}}.srt.bam",
+        bai=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/grch38/{{sample}}.srt.bam.bai"
     output:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_sniffles.vcf",
         snf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_grch38_sniffles.snf"
@@ -21,14 +22,14 @@ rule sniffles_grch38:
     threads:
         config["mc"]
     resources:
-        mem_mb=config["mm"],
-        time=config["ht"]
+        mem_mb=config["vhm"],
+        time=config["vht"]
     shell:
         r"""
         mkdir -p $(dirname {output.vcf})
 
         sniffles \
-            --input {input.sample} \
+            --input {input.bam} \
             --vcf {output.vcf} \
             --snf {output.snf} \
             --threads {threads}
@@ -37,7 +38,8 @@ rule sniffles_grch38:
 
 rule sniffles_chm13:
     input:
-        sample=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/chm13/{{sample}}.srt.bam"
+        bam=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/chm13/{{sample}}.srt.bam",
+        bai=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/chm13/{{sample}}.srt.bam.bai"
     output:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_sniffles.vcf",
         snf=f"{OUTDIR}/{{batch}}/{{sample}}/03.variant_calling/{{sample}}_chm13_sniffles.snf"
@@ -46,14 +48,14 @@ rule sniffles_chm13:
     threads:
         config["mc"]
     resources:
-        mem_mb=config["mm"],
-        time=config["ht"]
+        mem_mb=config["vhm"],
+        time=config["vht"]
     shell:
         r"""
         mkdir -p $(dirname {output.vcf})
 
         sniffles \
-            --input {input.sample} \
+            --input {input.bam} \
             --vcf {output.vcf} \
             --snf {output.snf} \
             --threads {threads}

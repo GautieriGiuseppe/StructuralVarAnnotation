@@ -395,6 +395,60 @@ rule plot_allele_pop_frequency_qc:
             --title "needLR control population frequency summary"
         """
 
+rule plot_needlr_trio_exploration_qc:
+    input:
+        trio_done=[
+            os.path.join(
+                NEEDLR_OUTDIR,
+                "trio",
+                family_id,
+                f"{family_id}.needLR_comparator.done"
+            )
+            for family_id in FAMILY_IDS
+        ]
+    output:
+        summary_png=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_summary.png",
+        summary_pdf=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_summary.pdf",
+        population_png=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_population_priority.png",
+        population_pdf=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_population_priority.pdf",
+        variant_table=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_variant_table.tsv",
+        inheritance_counts=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_inheritance_counts.tsv",
+        inheritance_svtype=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_inheritance_svtype_counts.tsv",
+        annotation_summary=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_annotation_summary.tsv",
+        context_summary=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_context_summary.tsv",
+        high_priority=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_high_priority_candidates.tsv",
+        rare_denovo=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_rare_de_novo_candidates.tsv"
+    conda:
+        "envs/plot_qc.yml"
+    threads: 1
+    resources:
+        mem_mb=config["mm"],
+        time=config["mt"]
+    params:
+        outdir=f"{OUTDIR}/cohort_results/needlr_trio_exploration",
+        prefix="needlr_trio_exploration",
+        rare_af_threshold=0.001,
+        min_alt_reads=3,
+        trio_vcf=os.path.join(
+            NEEDLR_OUTDIR,
+            "trio",
+            "AshkenazimTrio",
+            "needLR_comparator",
+            "HG002_NA24385_needLR_TRIO_1kg_v4.0",
+            "HG002_NA24385.needLR.4.0.vcf.gz"
+        )
+    shell:
+        r"""
+        mkdir -p {params.outdir}
+
+        python plots/plot_needLR_trio_exploration.py \
+            --vcf {params.trio_vcf} \
+            --out-dir {params.outdir} \
+            --out-prefix {params.prefix} \
+            --title-prefix "needLR trio comparator" \
+            --rare-af-threshold {params.rare_af_threshold} \
+            --min-alt-reads {params.min_alt_reads}
+        """
 
 rule plot_needlr_carrier_dynamic_qc:
     input:
@@ -564,6 +618,54 @@ rule plot_liftover_cost_qc:
             --title-suffix "{params.title_suffix}"
         """
 
+rule plot_alignment_qc_alfred_mosdepth:
+    input:
+        alignqc=rules.all_alignqc.input
+    output:
+        alfred_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_unique.png",
+        alfred_pdf=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_unique.pdf",
+        mosdepth_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_coverage_summary.png",
+        mosdepth_pdf=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_coverage_summary.pdf",
+        mosdepth_dist_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.png",
+        mosdepth_dist_pdf=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.pdf",
+        alfred_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_summary.tsv",
+        mosdepth_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_summary.tsv",
+        mosdepth_dist_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.tsv",
+        mosdepth_contig_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.png",
+        mosdepth_contig_pdf=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.pdf",
+        mosdepth_contig_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.tsv",
+    conda:
+        "envs/alignqc_plot_env.yml"
+    threads: 1
+    resources:
+        mem_mb=config["mm"],
+        time=config["mt"]
+    params:
+        samples=config["samples"],
+        workflow_outdir=OUTDIR,
+        outdir=f"{OUTDIR}/cohort_results/alignment_qc_plots",
+        prefix="alignment_qc",
+        mapq_threshold=20,
+        trio_arg=lambda wildcards: (
+            f"--trio-file {config.get('needlr', {}).get('trio_file')}"
+            if config.get("needlr", {}).get("trio_file")
+            else ""
+        )
+    shell:
+        r"""
+        mkdir -p {params.outdir}
+
+        python plots/plot_alignment_qc_alfred_mosdepth.py \
+            --samples {params.samples} \
+            --outdir {params.workflow_outdir} \
+            --out-dir {params.outdir} \
+            --out-prefix {params.prefix} \
+            --title-prefix "Alignment QC" \
+            --mapq-threshold {params.mapq_threshold} \
+            --skip-bam-unique \
+            {params.trio_arg}
+        """
+
 
 # ============================================================
 # Full cohort QC report
@@ -582,6 +684,16 @@ rule build_full_grch38_qc_report:
 
         read_qc_multiqc=f"{OUTDIR}/cohort_results/read_qc/multiqc/multiqc_report.html",
 
+        # Alignment QC plots/tables used by both cohort and trio reports
+        alignment_qc_alfred_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_unique.png",
+        alignment_qc_mosdepth_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_coverage_summary.png",
+        alignment_qc_mosdepth_dist_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.png",
+        alignment_qc_alfred_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_summary.tsv",
+        alignment_qc_mosdepth_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_summary.tsv",
+        alignment_qc_mosdepth_dist_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.tsv",
+        alignment_qc_mosdepth_contig_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.png",
+        alignment_qc_mosdepth_contig_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.tsv",
+
         upset_png=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.png",
         upset_pdf=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.pdf",
 
@@ -597,7 +709,8 @@ rule build_full_grch38_qc_report:
 
         needlr_png=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_annotation_burden_and_support.png",
         needlr_popfreq_png=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_control_population_frequency_summary.png",
-        needlr_carrier_png=f"{OUTDIR}/cohort_results/needlr_population_frequency_carriers_1_{N_SAMPLES}/needlr_popfreq_violin_carrier_counts_1_{N_SAMPLES}_present_only.png"
+        needlr_carrier_png=f"{OUTDIR}/cohort_results/needlr_population_frequency_carriers_1_{N_SAMPLES}/needlr_popfreq_violin_carrier_counts_1_{N_SAMPLES}_present_only.png",
+
     output:
         html=f"{QC_REPORT_DIR}/GRCh38_full_pipeline_QC_report.html",
         summary=f"{QC_REPORT_DIR}/GRCh38_full_pipeline_QC_summary.tsv"
@@ -658,6 +771,16 @@ rule build_full_grch38_trio_qc_report:
         crossref_table=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_confirmation_table.tsv",
         crossref_metrics=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_summary_metrics.tsv",
 
+        alignment_qc_alfred_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_unique.png",
+        alignment_qc_mosdepth_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_coverage_summary.png",
+        alignment_qc_mosdepth_dist_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.png",
+        alignment_qc_alfred_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_summary.tsv",
+        alignment_qc_mosdepth_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_summary.tsv",
+        alignment_qc_mosdepth_dist_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.tsv",
+        alignment_qc_mosdepth_contig_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.png",
+        alignment_qc_mosdepth_contig_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.tsv",
+
+
         # Native/lifted breakpoint and SVLEN distance
         svlen_breakpoint_png=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.png",
         svlen_breakpoint_pdf=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.pdf",
@@ -672,7 +795,9 @@ rule build_full_grch38_trio_qc_report:
                 f"{family_id}.needLR_comparator.done"
             )
             for family_id in FAMILY_IDS
-        ]
+        ],
+        trio_exploration_summary_png=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_summary.png",
+        trio_exploration_population_png=f"{OUTDIR}/cohort_results/needlr_trio_exploration/needlr_trio_exploration_population_priority.png",
     output:
         html=f"{QC_REPORT_DIR}/GRCh38_full_pipeline_QC_report_trio.html",
         summary=f"{QC_REPORT_DIR}/GRCh38_full_pipeline_QC_summary_trio.tsv"
