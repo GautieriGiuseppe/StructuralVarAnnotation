@@ -33,9 +33,11 @@ Repository structure:
 |-- alignqc_env.yml                      # Conda environment for QC
 |-- sample.example.tsv                   # Example sample sheet
 |-- Pipeline_overview.png
+|-- run_workflow.sh                      # sbatch file to execute pipeline 
 |-- bin/
 |  |-- StructuralVarAnnotation           # Main command-line wrapper
-| 
+|
+|-- plots/                               # Plotting and report generation module  
 |-- variant_calling/                     # Variant calling module
 |  |-- add_toolref_support_info.py       # Script to add tool-reference support field
 |  |-- delly_to_symbolic.py              # Script to adapt delly output to vcf standard
