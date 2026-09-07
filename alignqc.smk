@@ -70,7 +70,7 @@ rule alfred_stats_grch38:
     params:
         sample=lambda wc: wc.sample
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "variant_calling/envs/alignqc_env.yml"
     shell:
         r"""
         mkdir -p $(dirname {output})
@@ -96,7 +96,7 @@ rule mosdepth_stats_grch38:
     params:
         prefix=f"{OUTDIR}/{{batch}}/{{sample}}/02.alignqc/grch38/{{sample}}_grch38"
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "variant_calling/envs/alignqc_env.yml"
     shell:
         r"""
         mkdir -p $(dirname {output})
@@ -124,7 +124,7 @@ rule alfred_stats_chm13:
     params:
         sample=lambda wc: wc.sample
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "variant_calling/envs/alignqc_env.yml"
     shell:
         r"""
         mkdir -p $(dirname {output})
@@ -150,7 +150,7 @@ rule mosdepth_stats_chm13:
     params:
         prefix=f"{OUTDIR}/{{batch}}/{{sample}}/02.alignqc/chm13/{{sample}}_chm13"
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "variant_calling/envs/alignqc_env.yml"
     shell:
         r"""
         mkdir -p $(dirname {output})
