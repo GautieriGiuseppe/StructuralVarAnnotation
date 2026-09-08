@@ -5,13 +5,13 @@ channels:
   - defaults
 
 dependencies:
-  - python=3.11
+  - python
   - needlr=4.0
-  - bcftools=1.23.1
-  - bedtools=2.31.1
-  - htslib=1.23
-  - tabix=1.11
-  - survivor=1.0.7
-  - truvari=4.2.2
+  - bcftools
+  - bedtools
+  - htslib
+  - tabix
+  - survivor
+  - truvari
   - pandas
   - numpy

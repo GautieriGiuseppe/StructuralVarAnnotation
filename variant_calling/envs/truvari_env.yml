@@ -5,11 +5,11 @@ channels:
   - defaults
 
 dependencies:
-  - python=3.11
-  - bcftools=1.21
-  - htslib=1.21
-  - tabix=1.11
-  - survivor=1.0.7
-  - truvari=5.4.0
+  - python
+  - bcftools
+  - htslib
+  - tabix
+  - survivor
+  - truvari
   - pandas
   - numpy

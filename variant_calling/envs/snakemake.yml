@@ -1,7 +1,11 @@
 channels:
   - bioconda
   - conda-forge
+  - defaults
 dependencies:
   - crossmap=0.7.3
-  - python=3.11.9
-  - bcftools=1.15
+  - minimap2
+  - python
+  - bcftools
+  - htslib
+  - tabix
