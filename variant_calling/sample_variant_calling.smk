@@ -22,7 +22,7 @@ rule sniffles_grch38:
     threads:
         config["mc"]
     resources:
-        mem_mb=config["vhm"],
+        mem_mb=config["hm"],
         time=config["vht"]
     shell:
         r"""
@@ -48,7 +48,7 @@ rule sniffles_chm13:
     threads:
         config["mc"]
     resources:
-        mem_mb=config["vhm"],
+        mem_mb=config["hm"],
         time=config["vht"]
     shell:
         r"""

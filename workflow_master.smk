@@ -20,6 +20,17 @@ NEEDLR_OUTDIR = os.path.join(
     config.get("needlr", {}).get("outdir", "needLR_output")
 )
 
+NEEDLR_COHORT_DIR = os.path.join(
+    NEEDLR_OUTDIR,
+    "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
+)
+
+NEEDLR_COHORT_VCF = os.path.join(
+    NEEDLR_COHORT_DIR,
+    "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0",
+    "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
+)
+
 include: "align.smk"
 include: "alignqc.smk"
 include: "variant_calling/sample_variant_calling.smk"
@@ -43,10 +54,7 @@ rule all:
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
 
-        os.path.join(
-            NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
-        ),
+        NEEDLR_COHORT_DIR,
 
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json",

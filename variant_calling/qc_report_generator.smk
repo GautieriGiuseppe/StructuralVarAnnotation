@@ -18,6 +18,16 @@ NEEDLR_OUTDIR = os.path.join(
     config.get("needlr", {}).get("outdir", "needLR_output")
 )
 
+NEEDLR_COHORT_DIR = os.path.join(
+    NEEDLR_OUTDIR,
+    "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
+)
+
+NEEDLR_COHORT_VCF = os.path.join(
+    NEEDLR_COHORT_DIR,
+    "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0",
+    "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
+)
 
 # ============================================================
 # Trio metadata, parsed safely
@@ -323,12 +333,7 @@ rule plot_upset_qc:
 
 rule plot_needlr_qc:
     input:
-        vcf=os.path.join(
-            NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort",
-            "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0",
-            "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
-        )
+        needlr_dir=NEEDLR_COHORT_DIR
     output:
         png=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_annotation_burden_and_support.png",
         pdf=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_annotation_burden_and_support.pdf",
@@ -346,13 +351,14 @@ rule plot_needlr_qc:
     params:
         outdir=f"{OUTDIR}/cohort_results/needlr_annotation_plots",
         prefix="needlr_annotation_burden_and_support",
+        vcf=NEEDLR_COHORT_VCF,
         max_carriers=N_SAMPLES
     shell:
         r"""
         mkdir -p {params.outdir}
 
         python plots/plot_NeedLR.py \
-            --vcf {input.vcf} \
+            --vcf {params.vcf} \
             --out-dir {params.outdir} \
             --out-prefix {params.prefix} \
             --title "needLR annotation burden and support" \
@@ -362,12 +368,7 @@ rule plot_needlr_qc:
 
 rule plot_allele_pop_frequency_qc:
     input:
-        vcf=os.path.join(
-            NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort",
-            "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0",
-            "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
-        )
+        needlr_dir=NEEDLR_COHORT_DIR
     output:
         png=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_control_population_frequency_summary.png",
         pdf=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_control_population_frequency_summary.pdf",
@@ -383,13 +384,14 @@ rule plot_allele_pop_frequency_qc:
         time=config["mt"]
     params:
         outdir=f"{OUTDIR}/cohort_results/needlr_annotation_plots",
+        vcf=NEEDLR_COHORT_VCF,
         prefix="needlr_control_population_frequency_summary"
     shell:
         r"""
         mkdir -p {params.outdir}
 
         python plots/plot_allele_pop_frequency.py \
-            --vcf {input.vcf} \
+            --vcf {params.vcf} \
             --out-dir {params.outdir} \
             --out-prefix {params.prefix} \
             --title "needLR control population frequency summary"
@@ -452,12 +454,7 @@ rule plot_needlr_trio_exploration_qc:
 
 rule plot_needlr_carrier_dynamic_qc:
     input:
-        vcf=os.path.join(
-            NEEDLR_OUTDIR,
-            "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort",
-            "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input_needLR_1kg_v4.0",
-            "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
-        )
+        needlr_dir=NEEDLR_COHORT_DIR
     output:
         present_png=f"{OUTDIR}/cohort_results/needlr_population_frequency_carriers_1_{N_SAMPLES}/needlr_popfreq_violin_carrier_counts_1_{N_SAMPLES}_present_only.png",
         present_pdf=f"{OUTDIR}/cohort_results/needlr_population_frequency_carriers_1_{N_SAMPLES}/needlr_popfreq_violin_carrier_counts_1_{N_SAMPLES}_present_only.pdf",
@@ -478,13 +475,14 @@ rule plot_needlr_carrier_dynamic_qc:
         outdir=f"{OUTDIR}/cohort_results/needlr_population_frequency_carriers_1_{N_SAMPLES}",
         out_prefix="needlr_popfreq_violin_carrier_counts",
         summary_prefix="needlr_popfreq_carrier_counts",
-        max_carriers=N_SAMPLES
+        max_carriers=N_SAMPLES,
+        vcf=NEEDLR_COHORT_VCF
     shell:
         r"""
         mkdir -p {params.outdir}
 
         python plots/plot_needLR_popfreq_carriers.py \
-            --vcf {input.vcf} \
+            --vcf {params.vcf} \
             --out-dir {params.outdir} \
             --out-prefix {params.out_prefix} \
             --summary-prefix {params.summary_prefix} \
