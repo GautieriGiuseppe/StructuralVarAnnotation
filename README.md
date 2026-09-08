@@ -7,7 +7,7 @@ The workflow is designed for HPC execution and supports end-to-end analysis from
 
 ## Overview
 
-![Pipeline overview](Pipeline_overview.png)
+![Pipeline overview](Pipeline.png)
 
 StructuralVarAnnotation performs:
 
