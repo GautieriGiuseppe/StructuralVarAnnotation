@@ -1,0 +1,11 @@
+name: whatshap
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - whatshap
+  - samtools
+  - bcftools
+  - htslib
