@@ -79,6 +79,7 @@ SVTYPE_COLORS = {
 ANNOT_COLORS = {
     "Genic": "#5B83B1",
     "CDS": "#FF8C2A",
+    "UTR": "#9C755F",
     "OMIM": "#63A95B",
     "GENCC": "#5E55C8",
     "HPO": "#2FA882",
@@ -87,6 +88,8 @@ ANNOT_COLORS = {
 }
 
 CONTEXT_COLORS = {
+    "CDS": "#FF8C2A",
+    "UTR": "#9C755F",
     "HiConf": "#2FA882",
     "Repeat": "#8C8C8C",
     "Segdup": "#B279A2",
@@ -230,6 +233,12 @@ def first_float(info, keys):
             return value
     return np.nan
 
+def first_present_value(info, keys, default="."):
+    for key in keys:
+        value = info.get(key, default)
+        if is_present(value):
+            return value
+    return default
 
 def first_int(info, keys):
     for key in keys:
@@ -386,6 +395,26 @@ def load_trio_vcf(vcf_path, rare_af_threshold):
 
             genes = info.get("Genes", ".")
             cds = info.get("CDS", ".")
+
+            utr = first_present_value(
+                info,
+                [
+                    "UTR",
+                    "UTRs",
+                    "UTR5",
+                    "UTR3",
+                    "UTR_5",
+                    "UTR_3",
+                    "UTR_5prime",
+                    "UTR_3prime",
+                    "Five_prime_UTR",
+                    "Three_prime_UTR",
+                    "five_prime_UTR",
+                    "three_prime_UTR",
+                ],
+                default="."
+            )
+
             omim = info.get("OMIM_phenotype", ".")
             gencc = info.get("GENCC_phenotype", ".")
             hpo = info.get("HPO_terms", ".")
@@ -429,6 +458,7 @@ def load_trio_vcf(vcf_path, rare_af_threshold):
 
                 "Genes": genes,
                 "CDS": cds,
+                "UTR": utr,
                 "OMIM_phenotype": omim,
                 "OMIM_MOI": info.get("OMIM_MOI", "."),
                 "GENCC_phenotype": gencc,
@@ -439,6 +469,7 @@ def load_trio_vcf(vcf_path, rare_af_threshold):
 
                 "is_genic": is_present(genes),
                 "is_coding": is_present(cds),
+                "is_utr": is_present(utr),
                 "is_omim": is_present(omim),
                 "is_gencc": is_present(gencc),
                 "is_hpo": is_present(hpo),
@@ -484,6 +515,7 @@ def add_priority_score(df, min_alt_reads):
 
     d.loc[d["is_genic"], "priority_score"] += 1
     d.loc[d["is_coding"], "priority_score"] += 3
+    d.loc[d["is_utr"], "priority_score"] += 1
     d.loc[d["is_omim"], "priority_score"] += 3
     d.loc[d["is_gencc"], "priority_score"] += 3
     d.loc[d["is_hpo"], "priority_score"] += 2
@@ -532,6 +564,7 @@ def build_summary_tables(df):
             "n_variants": n,
             "pct_genic": 100 * sub["is_genic"].mean(),
             "pct_coding": 100 * sub["is_coding"].mean(),
+            "pct_utr": 100 * sub["is_utr"].mean(),
             "pct_omim": 100 * sub["is_omim"].mean(),
             "pct_gencc": 100 * sub["is_gencc"].mean(),
             "pct_hpo": 100 * sub["is_hpo"].mean(),
@@ -546,6 +579,8 @@ def build_summary_tables(df):
     annotation_summary = pd.DataFrame(annotation_rows)
 
     context_items = [
+        ("CDS", "is_coding"),
+        ("UTR", "is_utr"),
         ("HiConf", "HiConf"),
         ("Repeat", "Repeat"),
         ("Segdup", "Segdup"),
@@ -805,6 +840,7 @@ def plot_main_trio_summary(
     categories = [
         ("Genic", "pct_genic"),
         ("CDS", "pct_coding"),
+        ("UTR", "pct_utr"),
         ("OMIM", "pct_omim"),
         ("GENCC", "pct_gencc"),
         ("Rare", "pct_rare"),
@@ -812,13 +848,17 @@ def plot_main_trio_summary(
     ]
 
     x = np.arange(len(ann))
-    width = 0.12
+    width = min(0.11, 0.80 / max(len(categories), 1))
+    center_offset = (len(categories) - 1) / 2
 
     for i, (label, col) in enumerate(categories):
+        if col not in ann.columns:
+            continue
+
         vals = ann[col].fillna(0).values
 
         ax.bar(
-            x + (i - 2.5) * width,
+            x + (i - center_offset) * width,
             vals,
             width=width,
             color=ANNOT_COLORS[label],
@@ -906,7 +946,7 @@ def plot_population_priority_context(
 
     ax.set_ylabel("Control population frequency (%)")
     ax.set_xticklabels(labels, rotation=25, ha="right")
-    ax.set_title("A  Control population frequency", loc="left", fontweight="bold", fontsize=14)
+    ax.set_title("D  Functional and genomic context flags", loc="left", fontweight="bold", fontsize=14)
 
     # -------------------------------------------------------------------------
     # B. SVLEN distribution
@@ -1069,6 +1109,7 @@ def write_outputs(
         & (
             df["Inheritance"].eq("de_novo")
             | df["is_coding"]
+            | df["is_utr"]
             | df["is_omim"]
             | df["is_gencc"]
             | df["is_hpo"]
@@ -1080,11 +1121,12 @@ def write_outputs(
             "priority_score",
             "Inheritance",
             "is_coding",
+            "is_utr",
             "is_omim",
             "is_gencc",
             "Alt_Reads",
         ],
-        ascending=[False, True, False, False, False, False],
+        ascending=[False, True, False, False, False, False, False],
     )
 
     rare_denovo = df[
@@ -1093,6 +1135,7 @@ def write_outputs(
         & (
             df["is_genic"]
             | df["is_coding"]
+            | df["is_utr"]
             | df["is_omim"]
             | df["is_gencc"]
             | df["is_hpo"]
@@ -1103,11 +1146,12 @@ def write_outputs(
         [
             "priority_score",
             "is_coding",
+            "is_utr",
             "is_omim",
             "is_gencc",
             "Alt_Reads",
         ],
-        ascending=[False, False, False, False, False],
+        ascending=[False, False, False, False, False, False],
     )
 
     high_priority.to_csv(high_priority_tsv, sep="\t", index=False)
