@@ -32,7 +32,7 @@ Repository structure:
 |-- config-example.yml                   # Example config containing references and parameters
 |-- alignqc_env.yml                      # Conda environment for QC
 |-- sample.example.tsv                   # Example sample sheet
-|-- Pipeline_overview.png
+|-- Pipeline.png
 |-- run_workflow.sh                      # sbatch file to execute pipeline 
 |-- bin/
 |  |-- StructuralVarAnnotation           # Main command-line wrapper
@@ -48,6 +48,7 @@ Repository structure:
 |  |-- needLR_grch38.smk                 # needLR annotation
 |  |-- needLR_trio_grch38.smk            # needLR comparator for trio mode
 |  |-- crossref_confirmation_grch38.smk  # CHM13 -> GRCh38 confirmation
+|  |-- haplotype_grch38.smk              # Haplotypes identification
 |  |-- qc_report_generator.smk           # Full report build
 |  |-- envs/                             # Conda environments dependencies
 |  |-- container/
