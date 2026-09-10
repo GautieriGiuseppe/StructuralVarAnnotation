@@ -323,6 +323,37 @@ rule plot_upset_qc:
             --sample-support-max {params.sample_support_max}
         """
 
+# ==============================================================================
+# Haplotype phasing QC
+# ==============================================================================
+
+HAPLOTYPE_QC_DIR = f"{QC_REPORT_DIR}/haplotype_phasing"
+
+rule plot_haplotype_phasing_qc:
+    input:
+        rules.all_haplotype_grch38.input
+    output:
+        summary=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_summary.tsv",
+        table_png=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_summary_table.png",
+        rate_png=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_rate.png",
+        phase_sets_png=f"{HAPLOTYPE_QC_DIR}/haplotype_phase_sets.png",
+        haplotagged_reads_png=f"{HAPLOTYPE_QC_DIR}/haplotagged_reads.png",
+        genotype_composition_png=f"{HAPLOTYPE_QC_DIR}/haplotype_genotype_composition.png"
+    conda:
+        "envs/plot_qc.yml"
+    threads:
+        1
+    resources:
+        mem_mb=config["mm"],
+        time=config["mt"]
+    shell:
+        r"""
+        mkdir -p {HAPLOTYPE_QC_DIR}
+
+        python plots/plot_haplotype_phasing_qc.py \
+            --outdir {OUTDIR} \
+            --output-dir {HAPLOTYPE_QC_DIR}
+        """
 
 # ============================================================
 # needLR cohort annotation plots
@@ -692,6 +723,13 @@ rule build_full_grch38_qc_report:
         alignment_qc_mosdepth_contig_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.png",
         alignment_qc_mosdepth_contig_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.tsv",
 
+        haplotype_summary=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_summary.tsv",
+        haplotype_table=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_summary_table.png",
+        haplotype_rate=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_rate.png",
+        haplotype_phase_sets=f"{HAPLOTYPE_QC_DIR}/haplotype_phase_sets.png",
+        haplotagged_reads=f"{HAPLOTYPE_QC_DIR}/haplotagged_reads.png",
+        haplotype_genotype_composition=f"{HAPLOTYPE_QC_DIR}/haplotype_genotype_composition.png",
+
         upset_png=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.png",
         upset_pdf=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.pdf",
 
@@ -734,6 +772,7 @@ rule build_full_grch38_qc_report:
             --confirmation-tsv {input.confirmation_tsv} \
             --confirmation-summary {input.confirmation_summary} \
             --cohort-results-dir {params.cohort_results_dir} \
+            --haplotype-qc-dir {HAPLOTYPE_QC_DIR} \
             --out-html {output.html} \
             --out-summary {output.summary}
         """

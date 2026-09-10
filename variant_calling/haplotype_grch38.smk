@@ -59,7 +59,7 @@ rule subset_sample_grch38_genotyped_vcf_for_whatshap:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/05.haplotyping/grch38/{{sample}}.unphased.input.vcf.gz",
         tbi=f"{OUTDIR}/{{batch}}/{{sample}}/05.haplotyping/grch38/{{sample}}.unphased.input.vcf.gz.tbi"
     conda:
-        "variant_calling/envs/whatshap.yml"
+        "envs/whatshap.yml"
     threads:
         1
     resources:
@@ -93,7 +93,7 @@ rule whatshap_phase_grch38:
         vcf=f"{OUTDIR}/{{batch}}/{{sample}}/05.haplotyping/grch38/{{sample}}.whatshap.phased.vcf.gz",
         tbi=f"{OUTDIR}/{{batch}}/{{sample}}/05.haplotyping/grch38/{{sample}}.whatshap.phased.vcf.gz.tbi"
     conda:
-        "variant_calling/envs/whatshap.yml"
+        "envs/whatshap.yml"
     threads:
         config["lc"]
     resources:
@@ -138,7 +138,7 @@ rule whatshap_haplotag_grch38:
         bai=f"{OUTDIR}/{{batch}}/{{sample}}/05.haplotyping/grch38/{{sample}}.haplotagged.bam.bai",
         haplotag_list=f"{OUTDIR}/{{batch}}/{{sample}}/05.haplotyping/grch38/{{sample}}.haplotag_list.tsv"
     conda:
-        "variant_calling/envs/whatshap.yml"
+        "envs/whatshap.yml"
     threads:
         config["lc"]
     resources:
