@@ -1,5 +1,4 @@
 name: plot_qc
-
 channels:
   - conda-forge
   - bioconda
@@ -10,6 +9,7 @@ dependencies:
   - numpy
   - pandas
   - matplotlib<3.9
+  - pillow
   - scipy
   - seaborn
   - pysam
@@ -17,3 +17,4 @@ dependencies:
   - bcftools
   - htslib
   - tabix
+  - samtools

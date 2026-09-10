@@ -1,11 +1,14 @@
-name: whatshap
 channels:
-  - bioconda
   - conda-forge
-  - defaults
+  - bioconda
+  - nodefaults
+
 dependencies:
-  - python
-  - whatshap
-  - samtools
-  - bcftools
-  - htslib
+  - python=3.9
+  - whatshap=2.5
+  - biopython=1.81
+  - networkx
+  - pysam
+  - samtools=1.17
+  - bcftools=1.17
+  - htslib=1.17
