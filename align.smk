@@ -112,7 +112,7 @@ rule minimap2_GRCh38:
         prefix=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/grch38/{{sample}}",
         read_type=get_read_type
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "variant_calling/envs/align.yml"
     shell:
         r"""
         mkdir -p $(dirname {output.bam})
@@ -180,7 +180,7 @@ rule minimap2_chm13:
         prefix=f"{OUTDIR}/{{batch}}/{{sample}}/01.align/chm13/{{sample}}",
         read_type=get_read_type
     conda:
-        "variant_calling/envs/snakemake.yml"
+        "variant_calling/envs/align.yml"
     shell:
         r"""
         mkdir -p $(dirname {output.bam})
