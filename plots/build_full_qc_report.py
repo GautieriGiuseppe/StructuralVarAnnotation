@@ -77,6 +77,12 @@ def parse_args():
         help="Maximum number of rows shown for preview tables."
     )
 
+    parser.add_argument(
+        "--haplotype-qc-dir",
+        default=None,
+        help="Directory containing haplotype phasing QC summary tables and plots.",
+    )
+
     return parser.parse_args()
 
 
@@ -1297,7 +1303,178 @@ def render_needlr_trio_exploration_section(plot_paths, tables, cohort_results_di
 
     return html
 
+def render_haplotype_phasing_section(
+    haplotype_qc_dir,
+    plot_paths,
+    tables,
+    cohort_results_dir,
+    max_rows=20,
+):
+    if not haplotype_qc_dir:
+        return """
+        <p class='note'>
+          No haplotype phasing QC directory was provided.
+        </p>
+        """
 
+    summary_tsv = tables.get("haplotype_phasing_summary")
+
+    if not summary_tsv or not os.path.exists(summary_tsv):
+        return missing_box(
+            "No haplotype phasing summary found",
+            f"Expected summary TSV: {summary_tsv}"
+        )
+
+    df = pd.read_csv(summary_tsv, sep="\t")
+
+    if df.empty:
+        return "<p class='note'>Haplotype phasing summary table is empty.</p>"
+
+    min_all = df["pct_all_genotypes_phased"].min()
+    max_all = df["pct_all_genotypes_phased"].max()
+    mean_all = df["pct_all_genotypes_phased"].mean()
+
+    min_het = df["pct_heterozygous_phased"].min()
+    max_het = df["pct_heterozygous_phased"].max()
+    mean_het = df["pct_heterozygous_phased"].mean()
+
+    min_phase_sets = int(df["phase_sets"].min())
+    max_phase_sets = int(df["phase_sets"].max())
+    mean_phase_sets = df["phase_sets"].mean()
+
+    min_phased = int(df["phased_het"].min())
+    max_phased = int(df["phased_het"].max())
+
+    min_haplotagged = int(df["haplotagged_reads"].min())
+    max_haplotagged = int(df["haplotagged_reads"].max())
+
+    table_cols = [
+        "sample",
+        "total_genotypes",
+        "phased_het",
+        "unphased_het",
+        "pct_all_genotypes_phased",
+        "pct_heterozygous_phased",
+        "phase_sets",
+        "haplotagged_reads",
+    ]
+
+    display_df = df[[c for c in table_cols if c in df.columns]].copy()
+
+    for col in [
+        "pct_all_genotypes_phased",
+        "pct_heterozygous_phased",
+    ]:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].map(lambda x: f"{float(x):.2f}")
+
+    display_df = display_df.rename(
+        columns={
+            "sample": "Sample",
+            "total_genotypes": "Total genotypes",
+            "phased_het": "Phased heterozygous SVs",
+            "unphased_het": "Unphased heterozygous SVs",
+            "pct_all_genotypes_phased": "% all genotypes phased",
+            "pct_heterozygous_phased": "% heterozygous SVs phased",
+            "phase_sets": "Phase sets",
+            "haplotagged_reads": "Haplotagged reads",
+        }
+    )
+
+    html = f"""
+    <p>
+      Haplotype-aware phasing was performed on the GRCh38 force-genotyped
+      cohort VCF after subsetting each sample individually. WhatsHap was used
+      to phase SV genotypes using the corresponding GRCh38-aligned BAM files,
+      followed by read-level haplotagging.
+    </p>
+
+    {metric_cards([
+        ("Phased heterozygous SVs/sample", f"{min_phased:,}–{max_phased:,}"),
+        ("All-genotype phasing rate", f"{min_all:.2f}–{max_all:.2f}%"),
+        ("Mean all-genotype phasing rate", f"{mean_all:.2f}%"),
+        ("Heterozygous SV phasing rate", f"{min_het:.2f}–{max_het:.2f}%"),
+        ("Mean heterozygous SV phasing rate", f"{mean_het:.2f}%"),
+        ("Phase sets/sample", f"{min_phase_sets:,}–{max_phase_sets:,}"),
+        ("Mean phase sets/sample", f"{mean_phase_sets:.0f}"),
+        ("Haplotagged reads/sample", f"{min_haplotagged:,}–{max_haplotagged:,}"),
+    ])}
+
+    <p>
+      Across samples, {min_phased:,}–{max_phased:,} heterozygous SV genotypes
+      were phased. This corresponded to {min_all:.2f}–{max_all:.2f}% of all
+      force-genotyped records, or {min_het:.2f}–{max_het:.2f}% when calculated
+      only over heterozygous SV genotypes. WhatsHap assigned phased variants
+      to {min_phase_sets:,}–{max_phase_sets:,} phase sets per sample.
+    </p>
+
+    <p>
+      The heterozygous-only phasing rate is the most informative metric for this
+      section, because homozygous reference and homozygous alternate genotypes do
+      not provide allele-order information. The lower percentage calculated over
+      all genotype records reflects the structure of the force-genotyped cohort
+      matrix, which contains many non-heterozygous records.
+    </p>
+
+    <h3>Per-sample haplotype phasing summary</h3>
+    {scroll_table_html(display_df.to_html(index=False, classes="data-table", border=0, escape=True))}
+
+    <h3>Haplotype phasing plots</h3>
+
+    {png_figure_html(
+        plot_paths.get("haplotype_phasing_rate"),
+        "WhatsHap phasing rate",
+        caption=(
+            "Comparison of the percentage of phased genotypes calculated over "
+            "all force-genotyped records and over heterozygous SV genotypes only."
+        ),
+        cohort_results_dir=cohort_results_dir,
+    )}
+
+    {png_figure_html(
+        plot_paths.get("haplotype_phase_sets"),
+        "Phase sets per sample",
+        caption=(
+            "Number of distinct WhatsHap phase-set identifiers detected in each "
+            "sample-specific phased VCF."
+        ),
+        cohort_results_dir=cohort_results_dir,
+    )}
+
+    {png_figure_html(
+        plot_paths.get("haplotagged_reads"),
+        "Haplotagged read counts",
+        caption=(
+            "Number of reads assigned to haplotype 1 or haplotype 2 by WhatsHap "
+            "haplotagging."
+        ),
+        cohort_results_dir=cohort_results_dir,
+    )}
+
+    {png_figure_html(
+        plot_paths.get("haplotype_genotype_composition"),
+        "Genotype composition after WhatsHap phasing",
+        caption=(
+            "Distribution of homozygous reference, homozygous alternate, missing, "
+            "unphased heterozygous, and phased heterozygous genotype records."
+        ),
+        cohort_results_dir=cohort_results_dir,
+    )}
+
+    {collapsed_table_html(
+        "Show full haplotype phasing summary table",
+        df,
+        max_rows=max_rows,
+        drop_columns=None,
+    )}
+
+    <table class="mini-table">
+      <tr><th>Haplotype QC directory</th><td>{html_escape(haplotype_qc_dir)}</td></tr>
+      <tr><th>Summary table</th><td>{html_escape(summary_tsv)}</td></tr>
+    </table>
+    """
+
+    return html
 
 # =============================================================================
 # REPORT BUILDING
@@ -1421,7 +1598,16 @@ def build_html_report(
     {dataframe_to_html(svtype_df, max_rows=20)}
     """
 
+    haplotype_body = render_haplotype_phasing_section(
+        haplotype_qc_dir=args.haplotype_qc_dir,
+        plot_paths=plot_paths,
+        tables=tables,
+        cohort_results_dir=cohort_results_dir,
+        max_rows=args.max_table_rows,
+    )
+
     upset_sets = read_table(tables["upset_sets"])
+
 
     upset_body = f"""
     <p>
@@ -1670,6 +1856,7 @@ def build_html_report(
         <li><a href="#read-qc">Read QC</a></li>
         <li><a href="#alignment-qc">Alignment QC</a></li>
         <li><a href="#cohort">Cohort SV construction</a></li>
+        <li><a href="#haplotype-phasing">Haplotype phasing</a></li>
         <li><a href="#upset">Tool/reference support UpSet</a></li>
         <li><a href="#needlr">{html_escape(needlr_toc_label)}</a></li>
         {trio_exploration_toc}
@@ -1685,6 +1872,7 @@ def build_html_report(
         section("Read QC", "read-qc", read_qc_body),
         section("Alignment QC", "alignment-qc", alignment_qc_body),
         section("Cohort SV construction", "cohort", cohort_body),
+        section("Haplotype phasing", "haplotype-phasing", haplotype_body),
         section("Tool/reference support UpSet", "upset", upset_body),
         section(needlr_section_title, "needlr", needlr_body),
     ]
@@ -2100,6 +2288,30 @@ def main():
             "alignment_qc_plots",
             "alignment_qc_mosdepth_contig_coverage.png"
         ),
+        "haplotype_phasing_rate": os.path.join(
+            cohort_results_dir,
+            "qc_report",
+            "haplotype_phasing",
+            "haplotype_phasing_rate.png",
+        ),
+        "haplotype_phase_sets": os.path.join(
+            cohort_results_dir,
+            "qc_report",
+            "haplotype_phasing",
+            "haplotype_phase_sets.png",
+        ),
+        "haplotagged_reads": os.path.join(
+            cohort_results_dir,
+            "qc_report",
+            "haplotype_phasing",
+            "haplotagged_reads.png",
+        ),
+        "haplotype_genotype_composition": os.path.join(
+            cohort_results_dir,
+            "qc_report",
+            "haplotype_phasing",
+            "haplotype_genotype_composition.png",
+        ),
     }
 
     tables = {
@@ -2178,6 +2390,12 @@ def main():
             cohort_results_dir,
             "alignment_qc_plots",
             "alignment_qc_mosdepth_contig_coverage.tsv"
+        ),
+        "haplotype_phasing_summary": os.path.join(
+            cohort_results_dir,
+            "qc_report",
+            "haplotype_phasing",
+            "haplotype_phasing_summary.tsv",
         ),
     }
 
@@ -2358,6 +2576,58 @@ def main():
             "metric": "n_rare_annotated_de_novo_candidates",
             "value": len(trio_rare_denovo) if trio_rare_denovo is not None else 0,
         })
+
+    haplotype_summary = read_table(tables.get("haplotype_phasing_summary"))
+
+    if haplotype_summary is not None and not haplotype_summary.empty:
+        summary_rows.extend([
+            {
+                "section": "haplotype_phasing",
+                "metric": "min_phased_heterozygous_svs_per_sample",
+                "value": int(haplotype_summary["phased_het"].min()),
+            },
+            {
+                "section": "haplotype_phasing",
+                "metric": "max_phased_heterozygous_svs_per_sample",
+                "value": int(haplotype_summary["phased_het"].max()),
+            },
+            {
+                "section": "haplotype_phasing",
+                "metric": "mean_pct_all_genotypes_phased",
+                "value": round(
+                    float(haplotype_summary["pct_all_genotypes_phased"].mean()),
+                    4,
+                ),
+            },
+            {
+                "section": "haplotype_phasing",
+                "metric": "mean_pct_heterozygous_svs_phased",
+                "value": round(
+                    float(haplotype_summary["pct_heterozygous_phased"].mean()),
+                    4,
+                ),
+            },
+            {
+                "section": "haplotype_phasing",
+                "metric": "min_phase_sets_per_sample",
+                "value": int(haplotype_summary["phase_sets"].min()),
+            },
+            {
+                "section": "haplotype_phasing",
+                "metric": "max_phase_sets_per_sample",
+                "value": int(haplotype_summary["phase_sets"].max()),
+            },
+            {
+                "section": "haplotype_phasing",
+                "metric": "min_haplotagged_reads_per_sample",
+                "value": int(haplotype_summary["haplotagged_reads"].min()),
+            },
+            {
+                "section": "haplotype_phasing",
+                "metric": "max_haplotagged_reads_per_sample",
+                "value": int(haplotype_summary["haplotagged_reads"].max()),
+            },
+        ])
 
     for svtype, count in cohort_summary["svtype_counts"].items():
         summary_rows.append({

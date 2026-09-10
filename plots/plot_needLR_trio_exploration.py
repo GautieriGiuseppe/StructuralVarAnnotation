@@ -419,6 +419,12 @@ def load_trio_vcf(vcf_path, rare_af_threshold):
             gencc = info.get("GENCC_phenotype", ".")
             hpo = info.get("HPO_terms", ".")
 
+            calculated_total = (
+                    proband_alt + proband_ref
+                    if pd.notna(proband_alt) and pd.notna(proband_ref)
+                    else np.nan
+                )
+
             row = {
                 "CHROM": chrom,
                 "POS": int(pos),
@@ -438,8 +444,10 @@ def load_trio_vcf(vcf_path, rare_af_threshold):
 
                 "Alt_Reads": proband_alt,
                 "Ref_Reads": proband_ref,
+
                 "Total_Reads": proband_total,
-                "Alt_Fraction": alt_fraction(proband_alt, proband_total),
+                "Calculated_Total_Reads": calculated_total,
+                "Alt_Fraction": alt_fraction(proband_alt, calculated_total),
 
                 "Maternal_GT": info.get("Maternal_GT", "."),
                 "Maternal_Alt_Reads": maternal_alt,
@@ -572,7 +580,9 @@ def build_summary_tables(df):
             "pct_absent_controls": 100 * sub["is_absent_controls"].mean(),
             "median_svlen": sub["SVLEN"].median(),
             "median_alt_reads": sub["Alt_Reads"].median(),
-            "median_total_reads": sub["Total_Reads"].median(),
+            "median_ref_reads": sub["Ref_Reads"].median(),
+            "median_calculated_total_reads": sub["Calculated_Total_Reads"].median(),
+            "median_alt_fraction": sub["Alt_Fraction"].median(),
             "median_pop_freq_all": sub["Pop_Freq_ALL"].median(),
         })
 
