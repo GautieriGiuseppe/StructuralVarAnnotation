@@ -54,6 +54,8 @@ rule all:
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
 
+        rules.all_haplotype_grch38.input,
+
         NEEDLR_COHORT_DIR,
 
         f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
@@ -63,7 +65,6 @@ rule all:
 
         f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_report.html",
         f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_summary.tsv",
-
 
 rule all_trio:
     input:
