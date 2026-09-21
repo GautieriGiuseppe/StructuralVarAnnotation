@@ -17,6 +17,7 @@ TRIO=0
 UNLOCK=0
 SNAKEMAKE_MODULE="snakemake/9.6.3-python-3.11.5"
 CONDA_BIN=""
+GRCH38_ONLY=false
 
 usage() {
     cat <<EOF
@@ -39,6 +40,7 @@ Options:
   --target NAME            Snakemake target/rule to run instead of default rule all. Can be used multiple times.
   --trio                   Run trio/family needLR comparator mode instead of default cohort annotate
   --unlock                 Remove a stale Snakemake lock and exit
+  --grch38-only            Run only on GRCh38, skipping CHM13 alignment, SV calling, liftover and cross-reference confirmation.
   --snakemake-module NAME  Module to load for Snakemake [default: snakemake]
   --conda-bin DIR          Optional directory containing conda executable. If provided, it is prepended to PATH.
   --help                   Show this help
@@ -107,6 +109,10 @@ while [[ $# -gt 0 ]]; do
         --snakemake-module)
             SNAKEMAKE_MODULE="$2"
             shift 2
+            ;;
+        --grch38-only)
+            GRCH38_ONLY=true
+            shift
             ;;
         --conda-bin)
             CONDA_BIN="$2"
@@ -253,6 +259,7 @@ if [[ "$UNLOCK" -eq 1 ]]; then
         --config
             "samples=$SAMPLES"
             "output=${OUTDIR%/}"
+            "grch38_only=$GRCH38_ONLY"
         --unlock
     )
 
@@ -278,13 +285,15 @@ if [[ "$SLURM" -eq 1 ]]; then
     export SVA_SNAKEMAKE_MODULE="$SNAKEMAKE_MODULE"
     export SVA_CONDA_BIN="${CONDA_BIN%/}"
     export SVA_DRYRUN="$DRYRUN"
+    export SVA_GRCH38_ONLY="$GRCH38_ONLY"
 
     echo "Submitting StructuralVarAnnotation controller to SLURM:"
-    echo "  samples:   $SVA_SAMPLES"
-    echo "  config:    $SVA_CONFIG"
-    echo "  outdir:    $SVA_OUTDIR"
-    echo "  jobs:      $SVA_JOBS"
-    echo "  partition: $SVA_PARTITION"
+    echo "  samples:     $SVA_SAMPLES"
+    echo "  config:      $SVA_CONFIG"
+    echo "  outdir:      $SVA_OUTDIR"
+    echo "  jobs:        $SVA_JOBS"
+    echo "  partition:   $SVA_PARTITION"
+    echo "  GRCh38 only: $SVA_GRCH38_ONLY"
     echo
 
     sbatch "$REPO_DIR/run_workflow.sh"
@@ -304,6 +313,7 @@ CMD=(
     --config
         "samples=$SAMPLES"
         "output=$OUTDIR"
+        "grch38_only=$GRCH38_ONLY"
     --use-conda
     --rerun-incomplete
     --latency-wait 120
@@ -335,6 +345,7 @@ echo "Config:       $CONFIG"
 echo "Output:       $OUTDIR"
 echo "Jobs:         $JOBS"
 echo "Cluster jobs: $CLUSTER_JOBS"
+echo "GRCH38 only:  $GRCH38_ONLY"
 echo
 
 echo "Running:"

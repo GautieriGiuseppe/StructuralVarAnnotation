@@ -1,5 +1,6 @@
 import os
 
+
 samples_file = config["samples"]
 VALID_PAIRS = []
 
@@ -11,19 +12,67 @@ with open(samples_file, "r") as f:
     for line in f:
         if line.strip():
             fields = line.strip().split("\t")
-            VALID_PAIRS.append((fields[batch_idx], fields[sample_idx]))
+            VALID_PAIRS.append(
+                (
+                    fields[batch_idx],
+                    fields[sample_idx]
+                )
+            )
+
 
 OUTDIR = config["output"].rstrip("/")
 
+
+def config_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    return str(value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+
+
+GRCH38_ONLY = config_bool(
+    config.get("grch38_only", False)
+)
+
+
+ACTIVE_REFS = (
+    ["grch38"]
+    if GRCH38_ONLY
+    else ["grch38", "chm13"]
+)
+
+
+print(
+    "[StructuralVarAnnotation] Reference mode:",
+    "GRCh38-only"
+    if GRCH38_ONLY
+    else "GRCh38 + CHM13"
+)
+
+
 NEEDLR_OUTDIR = os.path.join(
     OUTDIR,
-    config.get("needlr", {}).get("outdir", "needLR_output")
+    config.get(
+        "needlr",
+        {}
+    ).get(
+        "outdir",
+        "needLR_output"
+    )
 )
+
 
 NEEDLR_COHORT_DIR = os.path.join(
     NEEDLR_OUTDIR,
     "GRCh38_final_cohort_survivor_genotyped_matrix_needLR_cohort"
 )
+
 
 NEEDLR_COHORT_VCF = os.path.join(
     NEEDLR_COHORT_DIR,
@@ -31,58 +80,96 @@ NEEDLR_COHORT_VCF = os.path.join(
     "GRCh38_final_cohort_survivor_genotyped_matrix.needlr_input.needLR.4.0.vcf.gz"
 )
 
+
 include: "align.smk"
 include: "alignqc.smk"
+
 include: "variant_calling/sample_variant_calling.smk"
+
 include: "variant_calling/cohort_merge_grch38.smk"
 include: "variant_calling/force_genotype_grch38.smk"
 include: "variant_calling/haplotype_grch38.smk"
+
 include: "variant_calling/needLR_grch38.smk"
 include: "variant_calling/needLR_trio_grch38.smk"
+
 include: "variant_calling/crossref_confirmation_grch38.smk"
 include: "variant_calling/qc_report_generator.smk"
+
+
+CROSSREF_TARGETS = (
+    []
+    if GRCH38_ONLY
+    else [
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor_confirmation.tsv",
+
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor_confirmation_summary.json",
+    ]
+)
 
 
 rule all:
     input:
         rules.all_alignqc.input,
 
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
-        f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor.vcf.gz",
 
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor.vcf.gz.tbi",
+
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_cohort_support_table.tsv",
+
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
+
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
 
         rules.all_haplotype_grch38.input,
 
         NEEDLR_COHORT_DIR,
 
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json",
+        CROSSREF_TARGETS,
 
-        f"{OUTDIR}/cohort_results/read_qc/multiqc/multiqc_report.html",
+        f"{OUTDIR}/cohort_results/"
+        "read_qc/multiqc/multiqc_report.html",
 
-        f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_report.html",
-        f"{OUTDIR}/cohort_results/qc_report/GRCh38_full_pipeline_QC_summary.tsv",
+        f"{OUTDIR}/cohort_results/qc_report/"
+        "GRCh38_full_pipeline_QC_report.html",
+
+        f"{OUTDIR}/cohort_results/qc_report/"
+        "GRCh38_full_pipeline_QC_summary.tsv",
+
 
 rule all_trio:
     input:
         rules.all_alignqc.input,
 
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz.tbi",
-        f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor.vcf.gz",
 
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor.vcf.gz.tbi",
+
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_cohort_support_table.tsv",
+
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
+
+        f"{OUTDIR}/cohort_results/"
+        "GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz.tbi",
 
         rules.all_needlr_trio_grch38.input,
 
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
-        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json",
+        CROSSREF_TARGETS,
 
-        f"{OUTDIR}/cohort_results/read_qc/multiqc/multiqc_report.html",
+        f"{OUTDIR}/cohort_results/"
+        "read_qc/multiqc/multiqc_report.html",
 
         rules.build_full_grch38_trio_qc_report.output[0],
         rules.build_full_grch38_trio_qc_report.output[1]
