@@ -108,6 +108,13 @@ The workflow generates a complete HTML QC report combining:
 - needLR population frequency plots
 - GRCh38/CHM13 confirmation plots 
 
+## GRCh38-only mode
+
+StructuralVarAnnotation supports an optional mode of execution using only the GRCh38 reference instead of the double reference with liftover and confirmation layer. 
+
+This execution preserves the standard workflow.
+
+
 ## Trio mode
 
 StructuralVarAnnotation supports an optional trio-analysis mode for family-aware downstream interpretation of structural variants.
