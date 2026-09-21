@@ -1,10 +1,26 @@
 import os
 
-OUTDIR = config["output"]
+OUTDIR = config["output"].rstrip("/")
 
 PAIRS = VALID_PAIRS
 BATCHES = [b for b, s in PAIRS]
 SAMPLES = [s for b, s in PAIRS]
+
+
+def config_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    return str(value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+
+
+GRCH38_ONLY = config_bool(config.get("grch38_only", False))
 
 # ==============================================================================
 # CHAIN
@@ -31,6 +47,35 @@ TOOLREF_SET_ORDER_GRCH38 = [
     ("Delly_CHM13_to_GR38", "delly", "lifted_chm13_to_grch38"),
     ("CuteSV_CHM13_to_GR38", "cuteSV", "lifted_chm13_to_grch38"),
 ]
+
+ACTIVE_TOOLREF_SET_ORDER_GRCH38 = (
+    [
+        entry
+        for entry in TOOLREF_SET_ORDER_GRCH38
+        if entry[2] == "native_grch38"
+    ]
+    if GRCH38_ONLY
+    else TOOLREF_SET_ORDER_GRCH38
+)
+
+N_ACTIVE_TOOLREF_INPUTS = (
+    len(ACTIVE_TOOLREF_SET_ORDER_GRCH38) * len(VALID_PAIRS)
+)
+
+print(
+    "[GRCh38 cohort merge] Reference mode:",
+    "GRCh38 only" if GRCH38_ONLY else "GRCh38 + CHM13"
+)
+
+print(
+    f"[GRCh38 cohort merge] Active tool/reference groups: "
+    f"{len(ACTIVE_TOOLREF_SET_ORDER_GRCH38)}"
+)
+
+print(
+    f"[GRCh38 cohort merge] Total SURVIVOR inputs: "
+    f"{N_ACTIVE_TOOLREF_INPUTS}"
+)
 
 
 # ==============================================================================
@@ -182,26 +227,34 @@ def grch38_toolref_vcf_path(batch, sample, tool, source):
     raise ValueError(f"Unknown GRCh38 source: {source}")
 
 
-def grch38_toolref_48way_paths():
+def grch38_toolref_active_paths():
     paths = []
 
-    for set_label, tool, source in TOOLREF_SET_ORDER_GRCH38:
+    for set_label, tool, source in ACTIVE_TOOLREF_SET_ORDER_GRCH38:
         for batch, sample in VALID_PAIRS:
-            paths.append(grch38_toolref_vcf_path(batch, sample, tool, source))
+            paths.append(
+                grch38_toolref_vcf_path(
+                    batch,
+                    sample,
+                    tool,
+                    source
+                )
+            )
 
     return paths
 
 
-ALL_GRCH38_TOOLREF_48WAY_VCFS = grch38_toolref_48way_paths()
+ALL_GRCH38_TOOLREF_VCFS = grch38_toolref_active_paths()
 
 
 rule grch38_toolref_48way_list:
     input:
-        vcfs=ALL_GRCH38_TOOLREF_48WAY_VCFS
+        vcfs=ALL_GRCH38_TOOLREF_VCFS
     output:
         listfile=f"{OUTDIR}/cohort_results/GRCh38_toolref_48way_vcf_list.txt",
         metadata=f"{OUTDIR}/cohort_results/GRCh38_toolref_48way_vcf_metadata.tsv"
-    threads: 1
+    threads:
+        1
     resources:
         mem_mb=config["mm"],
         time=config["mt"]
@@ -213,16 +266,41 @@ rule grch38_toolref_48way_list:
                 out.write(f"{vcf}\n")
 
         with open(output.metadata, "w") as out:
-            out.write("vector_index\tset_index\tset_label\ttool\tsource\tbatch\tsample\tpath\n")
+            out.write(
+                "vector_index\t"
+                "set_index\t"
+                "set_label\t"
+                "tool\t"
+                "source\t"
+                "batch\t"
+                "sample\t"
+                "path\n"
+            )
 
             vector_index = 0
-            for set_index, (set_label, tool, source) in enumerate(TOOLREF_SET_ORDER_GRCH38):
+
+            for set_index, (set_label, tool, source) in enumerate(
+                ACTIVE_TOOLREF_SET_ORDER_GRCH38
+            ):
                 for batch, sample in VALID_PAIRS:
-                    path = grch38_toolref_vcf_path(batch, sample, tool, source)
-                    out.write(
-                        f"{vector_index}\t{set_index}\t{set_label}\t{tool}\t"
-                        f"{source}\t{batch}\t{sample}\t{path}\n"
+                    path = grch38_toolref_vcf_path(
+                        batch,
+                        sample,
+                        tool,
+                        source
                     )
+
+                    out.write(
+                        f"{vector_index}\t"
+                        f"{set_index}\t"
+                        f"{set_label}\t"
+                        f"{tool}\t"
+                        f"{source}\t"
+                        f"{batch}\t"
+                        f"{sample}\t"
+                        f"{path}\n"
+                    )
+
                     vector_index += 1
 
 

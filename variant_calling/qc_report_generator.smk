@@ -2,6 +2,22 @@ import os
 
 OUTDIR = config["output"].rstrip("/")
 
+
+def config_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    return str(value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+
+
+GRCH38_ONLY = config_bool(config.get("grch38_only", False))
+
 QC_REPORT_DIR = f"{OUTDIR}/cohort_results/qc_report"
 READ_QC_DIR = f"{OUTDIR}/cohort_results/read_qc"
 
@@ -308,7 +324,12 @@ rule plot_upset_qc:
         prefix="GRCh38_integrated_toolref_upset_mean_sample_frequency",
         top_n=40,
         cmap="viridis",
-        sample_support_max=N_SAMPLES
+        sample_support_max=N_SAMPLES,
+        mode_arg=(
+            "--grch38-only"
+            if GRCH38_ONLY
+            else ""
+        )
     shell:
         r"""
         mkdir -p {params.outdir}
@@ -320,7 +341,8 @@ rule plot_upset_qc:
             --top-n {params.top_n} \
             --cmap {params.cmap} \
             --sample-support-min 1 \
-            --sample-support-max {params.sample_support_max}
+            --sample-support-max {params.sample_support_max} \
+            {params.mode_arg}
         """
 
 # ==============================================================================
@@ -675,6 +697,11 @@ rule plot_alignment_qc_alfred_mosdepth:
         outdir=f"{OUTDIR}/cohort_results/alignment_qc_plots",
         prefix="alignment_qc",
         mapq_threshold=20,
+        refs=(
+            "grch38"
+            if GRCH38_ONLY
+            else "grch38,chm13"
+        ),
         trio_arg=lambda wildcards: (
             f"--trio-file {config.get('needlr', {}).get('trio_file')}"
             if config.get("needlr", {}).get("trio_file")
@@ -689,11 +716,54 @@ rule plot_alignment_qc_alfred_mosdepth:
             --outdir {params.workflow_outdir} \
             --out-dir {params.outdir} \
             --out-prefix {params.prefix} \
+            --refs {params.refs} \
             --title-prefix "Alignment QC" \
             --mapq-threshold {params.mapq_threshold} \
             --skip-bam-unique \
             {params.trio_arg}
         """
+
+
+# ============================================================
+# Full cohort / trio QC reports
+#
+# Cross-reference outputs are required only in dual-reference mode.
+# In GRCh38-only mode these lists are empty, so Snakemake does not
+# pull the CHM13 confirmation branch into the DAG.
+# ============================================================
+
+CROSSREF_REPORT_INPUTS = (
+    []
+    if GRCH38_ONLY
+    else [
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json",
+
+        f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig1_summary.png",
+        f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig2_confirmation_patterns.png",
+        f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig3_chromosome_confirmation.png",
+        f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_confirmation_table.tsv",
+        f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_summary_metrics.tsv",
+
+        f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.png",
+        f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.pdf",
+        f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance_summary.tsv",
+    ]
+)
+
+
+REFERENCE_MODE = "grch38" if GRCH38_ONLY else "dual"
+
+CONFIRMATION_ARGS = (
+    ""
+    if GRCH38_ONLY
+    else (
+        f"--confirmation-tsv "
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv "
+        f"--confirmation-summary "
+        f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json"
+    )
+)
 
 
 # ============================================================
@@ -708,8 +778,6 @@ rule build_full_grch38_qc_report:
         cohort_vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         support_table=f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
         genotyped_vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
-        confirmation_tsv=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
-        confirmation_summary=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json",
 
         read_qc_multiqc=f"{OUTDIR}/cohort_results/read_qc/multiqc/multiqc_report.html",
 
@@ -723,6 +791,7 @@ rule build_full_grch38_qc_report:
         alignment_qc_mosdepth_contig_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.png",
         alignment_qc_mosdepth_contig_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.tsv",
 
+        # Haplotype QC
         haplotype_summary=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_summary.tsv",
         haplotype_table=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_summary_table.png",
         haplotype_rate=f"{HAPLOTYPE_QC_DIR}/haplotype_phasing_rate.png",
@@ -730,19 +799,14 @@ rule build_full_grch38_qc_report:
         haplotagged_reads=f"{HAPLOTYPE_QC_DIR}/haplotagged_reads.png",
         haplotype_genotype_composition=f"{HAPLOTYPE_QC_DIR}/haplotype_genotype_composition.png",
 
+        # UpSet
         upset_png=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.png",
         upset_pdf=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.pdf",
 
-        crossref_fig1_png=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig1_summary.png",
-        crossref_fig2_png=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig2_confirmation_patterns.png",
-        crossref_fig3_png=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig3_chromosome_confirmation.png",
-        crossref_table=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_confirmation_table.tsv",
-        crossref_metrics=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_summary_metrics.tsv",
+        # Empty in GRCh38-only mode; populated in dual-reference mode
+        crossref=CROSSREF_REPORT_INPUTS,
 
-        svlen_breakpoint_png=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.png",
-        svlen_breakpoint_pdf=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.pdf",
-        svlen_breakpoint_summary=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance_summary.tsv",
-
+        # needLR cohort plots
         needlr_png=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_annotation_burden_and_support.png",
         needlr_popfreq_png=f"{OUTDIR}/cohort_results/needlr_annotation_plots/needlr_control_population_frequency_summary.png",
         needlr_carrier_png=f"{OUTDIR}/cohort_results/needlr_population_frequency_carriers_1_{N_SAMPLES}/needlr_popfreq_violin_carrier_counts_1_{N_SAMPLES}_present_only.png",
@@ -758,19 +822,21 @@ rule build_full_grch38_qc_report:
         time=config["mt"]
     params:
         cohort_results_dir=f"{OUTDIR}/cohort_results",
-        samples=config["samples"]
+        samples=config["samples"],
+        reference_mode=REFERENCE_MODE,
+        confirmation_args=CONFIRMATION_ARGS
     shell:
         r"""
         mkdir -p $(dirname {output.html})
 
         python plots/build_full_qc_report.py \
             --mode cohort \
+            --reference-mode {params.reference_mode} \
             --samples {params.samples} \
             --cohort-vcf {input.cohort_vcf} \
             --support-table {input.support_table} \
             --genotyped-vcf {input.genotyped_vcf} \
-            --confirmation-tsv {input.confirmation_tsv} \
-            --confirmation-summary {input.confirmation_summary} \
+            {params.confirmation_args} \
             --cohort-results-dir {params.cohort_results_dir} \
             --haplotype-qc-dir {HAPLOTYPE_QC_DIR} \
             --out-html {output.html} \
@@ -791,8 +857,6 @@ rule build_full_grch38_trio_qc_report:
         cohort_vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor.vcf.gz",
         support_table=f"{OUTDIR}/cohort_results/GRCh38_cohort_support_table.tsv",
         genotyped_vcf=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_genotyped_matrix.vcf.gz",
-        confirmation_tsv=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation.tsv",
-        confirmation_summary=f"{OUTDIR}/cohort_results/GRCh38_final_cohort_survivor_confirmation_summary.json",
 
         # Read QC
         read_qc_multiqc=f"{OUTDIR}/cohort_results/read_qc/multiqc/multiqc_report.html",
@@ -801,13 +865,10 @@ rule build_full_grch38_trio_qc_report:
         upset_png=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.png",
         upset_pdf=f"{OUTDIR}/cohort_results/tool_reference_upset_new_cohort/GRCh38_integrated_toolref_upset_mean_sample_frequency.pdf",
 
-        # GRCh38/CHM13 confirmation plots
-        crossref_fig1_png=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig1_summary.png",
-        crossref_fig2_png=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig2_confirmation_patterns.png",
-        crossref_fig3_png=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_fig3_chromosome_confirmation.png",
-        crossref_table=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_confirmation_table.tsv",
-        crossref_metrics=f"{OUTDIR}/cohort_results/crossref_confirmation_infofield/crossref_infofield_summary_metrics.tsv",
+        # Empty in GRCh38-only mode; populated in dual-reference mode
+        crossref=CROSSREF_REPORT_INPUTS,
 
+        # Alignment QC plots/tables
         alignment_qc_alfred_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_alfred_mapping_unique.png",
         alignment_qc_mosdepth_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_coverage_summary.png",
         alignment_qc_mosdepth_dist_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.png",
@@ -816,12 +877,6 @@ rule build_full_grch38_trio_qc_report:
         alignment_qc_mosdepth_dist_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_global_distribution.tsv",
         alignment_qc_mosdepth_contig_png=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.png",
         alignment_qc_mosdepth_contig_tsv=f"{OUTDIR}/cohort_results/alignment_qc_plots/alignment_qc_mosdepth_contig_coverage.tsv",
-
-
-        # Native/lifted breakpoint and SVLEN distance
-        svlen_breakpoint_png=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.png",
-        svlen_breakpoint_pdf=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance.pdf",
-        svlen_breakpoint_summary=f"{OUTDIR}/cohort_results/crossref_confirmation_from_integrated_GRCh38/native_vs_lifted_support_distance/native_grch38_vs_lifted_chm13_support_distance_summary.tsv",
 
         # Trio needLR comparator
         trio_done=[
@@ -847,19 +902,21 @@ rule build_full_grch38_trio_qc_report:
     params:
         cohort_results_dir=f"{OUTDIR}/cohort_results",
         trio_dir=os.path.join(NEEDLR_OUTDIR, "trio"),
-        samples=config["samples"]
+        samples=config["samples"],
+        reference_mode=REFERENCE_MODE,
+        confirmation_args=CONFIRMATION_ARGS
     shell:
         r"""
         mkdir -p $(dirname {output.html})
 
         python plots/build_full_qc_report.py \
             --mode trio \
+            --reference-mode {params.reference_mode} \
             --samples {params.samples} \
             --cohort-vcf {input.cohort_vcf} \
             --support-table {input.support_table} \
             --genotyped-vcf {input.genotyped_vcf} \
-            --confirmation-tsv {input.confirmation_tsv} \
-            --confirmation-summary {input.confirmation_summary} \
+            {params.confirmation_args} \
             --cohort-results-dir {params.cohort_results_dir} \
             --needlr-trio-dir {params.trio_dir} \
             --out-html {output.html} \

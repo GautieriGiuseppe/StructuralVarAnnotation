@@ -226,11 +226,6 @@ def annotate_vcf(
             f"No metadata rows found with source == {native_source!r}"
         )
 
-    if not lifted_set_indices:
-        raise RuntimeError(
-            f"No metadata rows found with source == {lifted_source!r}"
-        )
-
     header_lines = []
     body_count = 0
 
@@ -354,10 +349,24 @@ def annotate_vcf(
     if body_count == 0:
         raise RuntimeError(f"No variant records were written from {vcf_path}")
 
-    sys.stderr.write(f"Wrote {body_count:,} annotated records to {out_path}\n")
     sys.stderr.write(f"Native source: {native_source}\n")
-    sys.stderr.write(f"Lifted source: {lifted_source}\n")
-    sys.stderr.write(f"Samples: {','.join(samples)}\n")
+
+    if lifted_set_indices:
+        sys.stderr.write(f"Lifted source: {lifted_source}\n")
+    else:
+        sys.stderr.write("Lifted source: not present in metadata\n")
+
+    sys.stderr.write(
+        f"Tool/reference groups: {n_sets}\n"
+    )
+
+    sys.stderr.write(
+        f"SURVIVOR input vectors: {n_vectors}\n"
+    )
+
+    sys.stderr.write(
+        f"Samples: {','.join(samples)}\n"
+    )
 
 
 # ==============================================================================

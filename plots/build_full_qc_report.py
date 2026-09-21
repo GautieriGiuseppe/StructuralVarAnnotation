@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
 """
-Build full GRCh38 pipeline QC report.
+Build the full StructuralVarAnnotation GRCh38 pipeline QC report.
 
-Designed for the current no-Truvari workflow.
-
-Modes:
+The report supports two annotation modes:
   cohort:
     Standard cohort needLR annotation and population-frequency summaries.
 
   trio:
-    Trio/family needLR comparator annotation. The upstream SV calling,
-    cohort merge, force genotyping, confirmation, read QC, and alignment QC
-    are the same, but the needLR section summarizes per-family comparator
-    outputs instead of cohort needLR annotation plots.
+    Trio/family needLR comparator annotation.
+
+The report also supports two reference strategies:
+  dual:
+    Native GRCh38 discovery plus CHM13 discovery lifted to GRCh38.
+
+  grch38:
+    Native GRCh38 discovery only. CHM13 alignment, calling, liftover,
+    cross-reference confirmation, and native-vs-lifted analyses are omitted.
 
 Main chapters:
   1. Run overview
   2. Read QC
   3. Alignment QC
   4. Cohort SV construction
-  5. Tool/reference support UpSet
-  6. needLR annotation / trio comparator annotation
-  7. needLR trio exploration, in trio mode
-  8. GRCh38/CHM13 cross-reference confirmation
-  9. Native/lifted breakpoint and SVLEN distance
-  10. Output files
+  5. Haplotype phasing
+  6. Tool/reference support UpSet
+  7. needLR annotation / trio comparator annotation
+  8. needLR trio exploration, in trio mode
+  9. GRCh38/CHM13 cross-reference confirmation, dual-reference mode only
+  10. Native/lifted breakpoint and SVLEN distance, dual-reference mode only
+  11. Output files
 """
 
 import os
@@ -51,8 +55,8 @@ def parse_args():
     parser.add_argument("--cohort-vcf", required=True)
     parser.add_argument("--support-table", required=True)
     parser.add_argument("--genotyped-vcf", required=True)
-    parser.add_argument("--confirmation-tsv", required=True)
-    parser.add_argument("--confirmation-summary", required=True)
+    parser.add_argument("--confirmation-tsv", default=None)
+    parser.add_argument("--confirmation-summary", default=None)
     parser.add_argument("--cohort-results-dir", required=True)
     parser.add_argument("--out-html", required=True)
     parser.add_argument("--out-summary", required=True)
@@ -62,6 +66,16 @@ def parse_args():
         choices=["cohort", "trio"],
         default="cohort",
         help="Report mode: cohort needLR annotation or trio needLR comparator."
+    )
+
+    parser.add_argument(
+        "--reference-mode",
+        choices=["dual", "grch38"],
+        default="dual",
+        help=(
+            "Reference strategy used by the workflow: 'dual' for native GRCh38 "
+            "plus CHM13-to-GRCh38 integration, or 'grch38' for GRCh38-only."
+        ),
     )
 
     parser.add_argument(
@@ -1063,8 +1077,8 @@ def render_alignment_qc_section(
             plot_paths.get("alignment_qc_alfred"),
             "ALFRED mapping and alignment error metrics",
             caption=(
-                "Comparison of GRCh38 and CHM13 mapping metrics parsed from "
-                "ALFRED outputs. BAM-derived unique mapping is skipped in the "
+                "Mapping metrics parsed from ALFRED outputs for the active "
+                "reference set. BAM-derived unique mapping is skipped in the "
                 "standard report to avoid expensive full-BAM scans."
             ),
             cohort_results_dir=cohort_results_dir,
@@ -1074,8 +1088,8 @@ def render_alignment_qc_section(
             plot_paths.get("alignment_qc_mosdepth"),
             "mosdepth coverage summary",
             caption=(
-                "Coverage summary across samples and references parsed from "
-                "mosdepth summary files."
+                "Coverage summary across samples and the active reference set "
+                "parsed from mosdepth summary files."
             ),
             cohort_results_dir=cohort_results_dir,
         )
@@ -1510,17 +1524,45 @@ def build_html_report(
         ("Cohort VCF records", format_int(cohort_summary["total_records"])),
         ("PASS records", format_int(cohort_summary["pass_records"])),
         ("Canonical PASS SVs", format_int(cohort_summary["canonical_pass_records"])),
-        ("Native and lifted support", format_int(cohort_summary["confirmed_native_and_lifted"])),
-        ("Native only", format_int(cohort_summary["native_only"])),
-        ("Lifted only", format_int(cohort_summary["lifted_only"])),
     ]
+
+    if args.reference_mode == "dual":
+        overview_metrics.extend([
+            (
+                "Native and lifted support",
+                format_int(cohort_summary["confirmed_native_and_lifted"]),
+            ),
+            ("Native only", format_int(cohort_summary["native_only"])),
+            ("Lifted only", format_int(cohort_summary["lifted_only"])),
+        ])
+
+        reference_description = """
+        This run used the <b>dual-reference strategy</b>: structural variants were
+        discovered independently against GRCh38 and CHM13, CHM13 calls were lifted
+        to GRCh38, and the resulting tool/reference callsets were integrated in
+        GRCh38 coordinate space. Cross-reference confirmation is derived from the
+        native/lifted support INFO fields in the integrated cohort VCF.
+        """
+    else:
+        overview_metrics.append(
+            (
+                "Native GRCh38 supported records",
+                format_int(cohort_summary["native_supported"]),
+            )
+        )
+
+        reference_description = """
+        This run used the <b>GRCh38-only strategy</b>. Structural-variant discovery,
+        cohort construction, force genotyping, phasing, and annotation were
+        performed using GRCh38 only. CHM13 alignment, CHM13 calling, liftover,
+        cross-reference confirmation, and native-vs-lifted analyses were not run.
+        """
 
     if args.mode == "trio":
         mode_description = """
-        This report was generated in <b>trio mode</b>. The workflow uses the same
-        upstream GRCh38/CHM13 SV integration and force-genotyping backbone, but
-        replaces standard cohort needLR annotation with per-family needLR
-        comparator annotation.
+        This report was generated in <b>trio mode</b>. The upstream cohort and
+        force-genotyping workflow follows the selected reference strategy, while
+        final needLR annotation is performed per family with the trio comparator.
         """
     else:
         mode_description = """
@@ -1530,12 +1572,9 @@ def build_html_report(
 
     overview_body = f"""
     {metric_cards(overview_metrics)}
+
     <p>
-      This report summarizes the GRCh38 structural-variant workflow using the
-      integrated no-Truvari confirmation strategy. Cross-reference confirmation
-      is derived directly from INFO fields in the integrated GRCh38 cohort VCF:
-      <code>NATIVE_GRCH38_SUPP</code>, <code>LIFTED_CHM13_GRCH38_SUPP</code>,
-      <code>ANY_NATIVE_GRCH38</code>, and <code>ANY_LIFTED_CHM13_GRCH38</code>.
+      {reference_description}
     </p>
 
     <p>
@@ -1545,6 +1584,7 @@ def build_html_report(
     <table class="mini-table">
       <tr><th>Generated</th><td>{html_escape(now)}</td></tr>
       <tr><th>Mode</th><td>{html_escape(args.mode)}</td></tr>
+      <tr><th>Reference strategy</th><td>{html_escape(args.reference_mode)}</td></tr>
       <tr><th>Samples file</th><td>{html_escape(args.samples)}</td></tr>
       <tr><th>Cohort results dir</th><td>{html_escape(args.cohort_results_dir)}</td></tr>
       <tr><th>Cohort VCF</th><td>{html_escape(args.cohort_vcf)}</td></tr>
@@ -1580,19 +1620,55 @@ def build_html_report(
         ]
     )
 
+    if args.reference_mode == "dual":
+        cohort_description = """
+        The final integrated GRCh38 cohort VCF combines native GRCh38 support
+        with CHM13 calls lifted to GRCh38.
+        """
+
+        cohort_metrics = [
+            ("Total records", format_int(cohort_summary["total_records"])),
+            ("PASS records", format_int(cohort_summary["pass_records"])),
+            (
+                "Canonical PASS SVs",
+                format_int(cohort_summary["canonical_pass_records"]),
+            ),
+            (
+                "Native supported records",
+                format_int(cohort_summary["native_supported"]),
+            ),
+            (
+                "Lifted supported records",
+                format_int(cohort_summary["lifted_supported"]),
+            ),
+        ]
+    else:
+        cohort_description = """
+        The final GRCh38 cohort VCF was constructed exclusively from structural
+        variants discovered against GRCh38 with Sniffles, Delly, and cuteSV.
+        No CHM13-derived calls were included.
+        """
+
+        cohort_metrics = [
+            ("Total records", format_int(cohort_summary["total_records"])),
+            ("PASS records", format_int(cohort_summary["pass_records"])),
+            (
+                "Canonical PASS SVs",
+                format_int(cohort_summary["canonical_pass_records"]),
+            ),
+            (
+                "Native GRCh38 supported records",
+                format_int(cohort_summary["native_supported"]),
+            ),
+        ]
+
     cohort_body = f"""
     <p>
-      The final integrated GRCh38 cohort VCF combines native GRCh38 support and
-      CHM13 calls lifted to GRCh38. The summary below is parsed directly from the
-      final VCF without bcftools.
+      {cohort_description}
+      The summary below is parsed directly from the final VCF without bcftools.
     </p>
-    {metric_cards([
-        ("Total records", format_int(cohort_summary["total_records"])),
-        ("PASS records", format_int(cohort_summary["pass_records"])),
-        ("Canonical PASS SVs", format_int(cohort_summary["canonical_pass_records"])),
-        ("Native supported records", format_int(cohort_summary["native_supported"])),
-        ("Lifted supported records", format_int(cohort_summary["lifted_supported"])),
-    ])}
+
+    {metric_cards(cohort_metrics)}
 
     <h3>Canonical SV type counts</h3>
     {dataframe_to_html(svtype_df, max_rows=20)}
@@ -1609,11 +1685,22 @@ def build_html_report(
     upset_sets = read_table(tables["upset_sets"])
 
 
+    if args.reference_mode == "dual":
+        upset_description = (
+            "The UpSet plot summarizes support across the native GRCh38 and "
+            "lifted CHM13 tool/reference groups."
+        )
+    else:
+        upset_description = (
+            "The UpSet plot summarizes caller support across the three native "
+            "GRCh38 callsets: Sniffles, Delly, and cuteSV."
+        )
+
     upset_body = f"""
     <p>
-      The UpSet plot summarizes support across native GRCh38 and lifted CHM13
-      tool/reference groups. Bar color represents mean cohort sample support.
+      {upset_description} Bar color represents mean cohort sample support.
     </p>
+
     {png_figure_html(
         plot_paths["upset"],
         "Tool/reference support UpSet",
@@ -1704,100 +1791,105 @@ def build_html_report(
     else:
         trio_exploration_body = ""
 
-    crossref_metrics = read_metrics_tsv(tables["crossref_metrics"])
-    crossref_metrics_df = read_table(tables["crossref_metrics"])
-    crossref_table = read_table(tables["crossref_table"])
+    crossref_body = ""
+    breakpoint_body = ""
 
-    confirmation_cards = []
+    if args.reference_mode == "dual":
+        crossref_metrics = read_metrics_tsv(tables["crossref_metrics"])
+        crossref_metrics_df = read_table(tables["crossref_metrics"])
+        crossref_table = read_table(tables["crossref_table"])
 
-    if crossref_metrics:
-        for key in [
-            "n_grch38_canonical",
-            "n_confirmed_by_chm13",
-            "n_grch38_only",
-            "pct_confirmed_by_chm13",
-            "n_integrated_shared_native_and_lifted",
-            "n_integrated_lifted_only",
-            "n_integrated_native_only",
-        ]:
-            if key in crossref_metrics:
-                value = crossref_metrics[key]
+        confirmation_cards = []
 
-                if "pct" in key:
-                    try:
-                        value = f"{float(value):.2f}%"
-                    except Exception:
-                        pass
-                else:
-                    try:
-                        value = f"{int(float(value)):,}"
-                    except Exception:
-                        pass
+        if crossref_metrics:
+            for key in [
+                "n_grch38_canonical",
+                "n_confirmed_by_chm13",
+                "n_grch38_only",
+                "pct_confirmed_by_chm13",
+                "n_integrated_shared_native_and_lifted",
+                "n_integrated_lifted_only",
+                "n_integrated_native_only",
+            ]:
+                if key in crossref_metrics:
+                    value = crossref_metrics[key]
 
-                confirmation_cards.append((key, value))
+                    if "pct" in key:
+                        try:
+                            value = f"{float(value):.2f}%"
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            value = f"{int(float(value)):,}"
+                        except Exception:
+                            pass
 
-    if not confirmation_cards and confirmation_summary:
-        for key, value in confirmation_summary.items():
-            if isinstance(value, (int, float, str)):
-                confirmation_cards.append((key, value))
+                    confirmation_cards.append((key, value))
 
-    crossref_body = f"""
-    <p>
-      Confirmation is computed directly from the integrated GRCh38 INFO fields.
-      A variant is considered confirmed when it has lifted CHM13-to-GRCh38
-      support. This replaces the previous Truvari-based confirmation step.
-    </p>
+        if not confirmation_cards and confirmation_summary:
+            for key, value in confirmation_summary.items():
+                if isinstance(value, (int, float, str)):
+                    confirmation_cards.append((key, value))
 
-    {metric_cards(confirmation_cards[:8]) if confirmation_cards else "<p class='note'>No cross-reference metrics available.</p>"}
+        crossref_body = f"""
+        <p>
+          Confirmation is computed directly from the integrated GRCh38 INFO
+          fields. A variant is considered confirmed when it has lifted
+          CHM13-to-GRCh38 support. This replaces the previous Truvari-based
+          confirmation step.
+        </p>
 
-    {png_figure_html(
-        plot_paths["crossref_fig1"],
-        "Cross-reference confirmation summary",
-        cohort_results_dir=cohort_results_dir
-    )}
+        {metric_cards(confirmation_cards[:8]) if confirmation_cards else "<p class='note'>No cross-reference metrics available.</p>"}
 
-    {png_figure_html(
-        plot_paths["crossref_fig2"],
-        "Cross-reference confirmation patterns",
-        cohort_results_dir=cohort_results_dir
-    )}
+        {png_figure_html(
+            plot_paths["crossref_fig1"],
+            "Cross-reference confirmation summary",
+            cohort_results_dir=cohort_results_dir
+        )}
 
-    {png_figure_html(
-        plot_paths["crossref_fig3"],
-        "Chromosome-level confirmation",
-        cohort_results_dir=cohort_results_dir
-    )}
+        {png_figure_html(
+            plot_paths["crossref_fig2"],
+            "Cross-reference confirmation patterns",
+            cohort_results_dir=cohort_results_dir
+        )}
 
-    <h3>Cross-reference metrics</h3>
-    {dataframe_to_html(crossref_metrics_df, max_rows=100)}
+        {png_figure_html(
+            plot_paths["crossref_fig3"],
+            "Chromosome-level confirmation",
+            cohort_results_dir=cohort_results_dir
+        )}
 
-    {collapsed_table_html(
-        "Show confirmation table preview",
-        crossref_table,
-        max_rows=args.max_table_rows,
-        drop_columns=None
-    )}
-    """
+        <h3>Cross-reference metrics</h3>
+        {dataframe_to_html(crossref_metrics_df, max_rows=100)}
 
-    breakpoint_summary = read_table(tables["svlen_breakpoint_summary"])
+        {collapsed_table_html(
+            "Show confirmation table preview",
+            crossref_table,
+            max_rows=args.max_table_rows,
+            drop_columns=None
+        )}
+        """
 
-    breakpoint_body = f"""
-    <p>
-      This analysis compares the coordinates and SV lengths reported by native
-      GRCh38 and lifted CHM13 support within the same integrated GRCh38 cohort
-      record. It is derived from FORMAT-level support information and the
-      GRCh38 tool/reference metadata.
-    </p>
+        breakpoint_summary = read_table(tables["svlen_breakpoint_summary"])
 
-    {png_figure_html(
-        plot_paths["svlen_breakpoint"],
-        "Native GRCh38 vs lifted CHM13 support distance",
-        cohort_results_dir=cohort_results_dir
-    )}
+        breakpoint_body = f"""
+        <p>
+          This analysis compares the coordinates and SV lengths reported by
+          native GRCh38 and lifted CHM13 support within the same integrated
+          GRCh38 cohort record. It is derived from FORMAT-level support
+          information and the GRCh38 tool/reference metadata.
+        </p>
 
-    <h3>Breakpoint and SVLEN distance summary</h3>
-    {dataframe_to_html(breakpoint_summary, max_rows=20)}
-    """
+        {png_figure_html(
+            plot_paths["svlen_breakpoint"],
+            "Native GRCh38 vs lifted CHM13 support distance",
+            cohort_results_dir=cohort_results_dir
+        )}
+
+        <h3>Breakpoint and SVLEN distance summary</h3>
+        {dataframe_to_html(breakpoint_summary, max_rows=20)}
+        """
 
     output_rows = []
 
@@ -1846,7 +1938,16 @@ def build_html_report(
 
     trio_exploration_toc = ""
     if args.mode == "trio":
-        trio_exploration_toc = '<li><a href="#trio-exploration">needLR trio exploration</a></li>'
+        trio_exploration_toc = (
+            '<li><a href="#trio-exploration">needLR trio exploration</a></li>'
+        )
+
+    crossref_toc = ""
+    if args.reference_mode == "dual":
+        crossref_toc = """
+        <li><a href="#crossref">GRCh38/CHM13 confirmation</a></li>
+        <li><a href="#breakpoint">Breakpoint and SVLEN distance</a></li>
+        """
 
     toc = f"""
     <nav class="toc">
@@ -1860,8 +1961,7 @@ def build_html_report(
         <li><a href="#upset">Tool/reference support UpSet</a></li>
         <li><a href="#needlr">{html_escape(needlr_toc_label)}</a></li>
         {trio_exploration_toc}
-        <li><a href="#crossref">GRCh38/CHM13 confirmation</a></li>
-        <li><a href="#breakpoint">Breakpoint and SVLEN distance</a></li>
+        {crossref_toc}
         <li><a href="#outputs">Output files</a></li>
       </ol>
     </nav>
@@ -1882,11 +1982,15 @@ def build_html_report(
             section("needLR trio exploration", "trio-exploration", trio_exploration_body)
         )
 
-    body_sections.extend([
-        section("GRCh38/CHM13 confirmation", "crossref", crossref_body),
-        section("Breakpoint and SVLEN distance", "breakpoint", breakpoint_body),
-        section("Output files", "outputs", outputs_body),
-    ])
+    if args.reference_mode == "dual":
+        body_sections.extend([
+            section("GRCh38/CHM13 confirmation", "crossref", crossref_body),
+            section("Breakpoint and SVLEN distance", "breakpoint", breakpoint_body),
+        ])
+
+    body_sections.append(
+        section("Output files", "outputs", outputs_body)
+    )
 
     body = "\n".join(body_sections)
 
@@ -2129,17 +2233,21 @@ def build_html_report(
     </style>
     """
 
+    if args.reference_mode == "dual":
+        reference_subtitle = (
+            "Integrated native GRCh38 and CHM13-to-GRCh38 structural-variant workflow"
+        )
+    else:
+        reference_subtitle = "GRCh38-only structural-variant workflow"
+
     if args.mode == "trio":
         html_title = "GRCh38 full pipeline QC report - trio mode"
         html_subtitle = (
-            "Integrated native GRCh38 and CHM13-to-GRCh38 structural-variant "
-            "workflow with needLR trio comparator annotation"
+            f"{reference_subtitle} with needLR trio comparator annotation"
         )
     else:
         html_title = "GRCh38 full pipeline QC report"
-        html_subtitle = (
-            "Integrated native GRCh38 and CHM13-to-GRCh38 structural-variant workflow"
-        )
+        html_subtitle = reference_subtitle
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -2205,7 +2313,12 @@ def main():
     )
 
     cohort_summary = summarize_vcf(args.cohort_vcf)
-    confirmation_summary = read_confirmation_summary(args.confirmation_summary)
+
+    confirmation_summary = {}
+    if args.reference_mode == "dual" and args.confirmation_summary:
+        confirmation_summary = read_confirmation_summary(
+            args.confirmation_summary
+        )
 
     html_paths = {
         "read_qc_multiqc": os.path.join(
@@ -2470,6 +2583,22 @@ def main():
         ]:
             tables.pop(key, None)
 
+    if args.reference_mode == "grch38":
+        for key in [
+            "crossref_fig1",
+            "crossref_fig2",
+            "crossref_fig3",
+            "svlen_breakpoint",
+        ]:
+            plot_paths.pop(key, None)
+
+        for key in [
+            "crossref_table",
+            "crossref_metrics",
+            "svlen_breakpoint_summary",
+        ]:
+            tables.pop(key, None)
+
     summary_rows = []
 
     summary_rows.append({
@@ -2478,18 +2607,68 @@ def main():
         "value": args.mode,
     })
 
+    summary_rows.append({
+        "section": "run",
+        "metric": "reference_mode",
+        "value": args.reference_mode,
+    })
+
     summary_rows.extend([
-        {"section": "overview", "metric": "n_samples", "value": samples_df["sample_id"].nunique()},
-        {"section": "overview", "metric": "n_batches", "value": samples_df["batch_id"].nunique()},
-        {"section": "cohort", "metric": "total_vcf_records", "value": cohort_summary["total_records"]},
-        {"section": "cohort", "metric": "pass_vcf_records", "value": cohort_summary["pass_records"]},
-        {"section": "cohort", "metric": "canonical_pass_svs", "value": cohort_summary["canonical_pass_records"]},
-        {"section": "cohort", "metric": "native_supported_records", "value": cohort_summary["native_supported"]},
-        {"section": "cohort", "metric": "lifted_supported_records", "value": cohort_summary["lifted_supported"]},
-        {"section": "cohort", "metric": "native_and_lifted_records", "value": cohort_summary["confirmed_native_and_lifted"]},
-        {"section": "cohort", "metric": "native_only_records", "value": cohort_summary["native_only"]},
-        {"section": "cohort", "metric": "lifted_only_records", "value": cohort_summary["lifted_only"]},
+        {
+            "section": "overview",
+            "metric": "n_samples",
+            "value": samples_df["sample_id"].nunique(),
+        },
+        {
+            "section": "overview",
+            "metric": "n_batches",
+            "value": samples_df["batch_id"].nunique(),
+        },
+        {
+            "section": "cohort",
+            "metric": "total_vcf_records",
+            "value": cohort_summary["total_records"],
+        },
+        {
+            "section": "cohort",
+            "metric": "pass_vcf_records",
+            "value": cohort_summary["pass_records"],
+        },
+        {
+            "section": "cohort",
+            "metric": "canonical_pass_svs",
+            "value": cohort_summary["canonical_pass_records"],
+        },
+        {
+            "section": "cohort",
+            "metric": "native_supported_records",
+            "value": cohort_summary["native_supported"],
+        },
     ])
+
+    if args.reference_mode == "dual":
+        summary_rows.extend([
+            {
+                "section": "cohort",
+                "metric": "lifted_supported_records",
+                "value": cohort_summary["lifted_supported"],
+            },
+            {
+                "section": "cohort",
+                "metric": "native_and_lifted_records",
+                "value": cohort_summary["confirmed_native_and_lifted"],
+            },
+            {
+                "section": "cohort",
+                "metric": "native_only_records",
+                "value": cohort_summary["native_only"],
+            },
+            {
+                "section": "cohort",
+                "metric": "lifted_only_records",
+                "value": cohort_summary["lifted_only"],
+            },
+        ])
 
     summary_rows.extend([
         {
@@ -2636,21 +2815,25 @@ def main():
             "value": count,
         })
 
-    for key, value in confirmation_summary.items():
-        if isinstance(value, (int, float, str)):
+    if args.reference_mode == "dual":
+        for key, value in confirmation_summary.items():
+            if isinstance(value, (int, float, str)):
+                summary_rows.append({
+                    "section": "confirmation_summary_json",
+                    "metric": key,
+                    "value": value,
+                })
+
+        crossref_metrics = read_metrics_tsv(
+            tables["crossref_metrics"]
+        )
+
+        for key, value in crossref_metrics.items():
             summary_rows.append({
-                "section": "confirmation_summary_json",
+                "section": "crossref_infofield",
                 "metric": key,
                 "value": value,
             })
-
-    crossref_metrics = read_metrics_tsv(tables["crossref_metrics"])
-    for key, value in crossref_metrics.items():
-        summary_rows.append({
-            "section": "crossref_infofield",
-            "metric": key,
-            "value": value,
-        })
 
     for label, path in plot_paths.items():
         summary_rows.append({
