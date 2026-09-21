@@ -5,7 +5,28 @@ import os
 # ==============================================================================
 
 samples_file = config["samples"]
-OUTDIR = config["output"]
+OUTDIR = config["output"].rstrip("/")
+
+
+def config_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    return str(value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+
+
+GRCH38_ONLY = config_bool(config.get("grch38_only", False))
+
+print(
+    "Alignment QC reference mode:",
+    "GRCh38 only" if GRCH38_ONLY else "GRCh38 + CHM13"
+)
 
 print(f"Loading samples from: {samples_file}")
 
@@ -38,18 +59,29 @@ rule all_alignqc:
             f"{OUTDIR}/{batch}/{sample}/02.alignqc/grch38/{sample}.alfred.tsv.gz"
             for batch, sample in VALID_PAIRS
         ],
+
         grch38_mosdepth=[
             f"{OUTDIR}/{batch}/{sample}/02.alignqc/grch38/{sample}_grch38.mosdepth.global.dist.txt"
             for batch, sample in VALID_PAIRS
         ],
-        chm13_alfred=[
-            f"{OUTDIR}/{batch}/{sample}/02.alignqc/chm13/{sample}.alfred.tsv.gz"
-            for batch, sample in VALID_PAIRS
-        ],
-        chm13_mosdepth=[
-            f"{OUTDIR}/{batch}/{sample}/02.alignqc/chm13/{sample}_chm13.mosdepth.global.dist.txt"
-            for batch, sample in VALID_PAIRS
-        ]
+
+        chm13_alfred=(
+            []
+            if GRCH38_ONLY
+            else [
+                f"{OUTDIR}/{batch}/{sample}/02.alignqc/chm13/{sample}.alfred.tsv.gz"
+                for batch, sample in VALID_PAIRS
+            ]
+        ),
+
+        chm13_mosdepth=(
+            []
+            if GRCH38_ONLY
+            else [
+                f"{OUTDIR}/{batch}/{sample}/02.alignqc/chm13/{sample}_chm13.mosdepth.global.dist.txt"
+                for batch, sample in VALID_PAIRS
+            ]
+        )
 
 
 # ==============================================================================

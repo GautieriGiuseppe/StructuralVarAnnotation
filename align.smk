@@ -3,6 +3,26 @@ import os
 samples_file = config["samples"]
 OUTDIR = config["output"].rstrip("/")
 
+def config_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    return str(value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+
+
+GRCH38_ONLY = config_bool(config.get("grch38_only", False))
+
+print(
+    "Alignment reference mode:",
+    "GRCh38 only" if GRCH38_ONLY else "GRCh38 + CHM13"
+)
+
 print(f"Loading samples from: {samples_file}")
 
 VALID_PAIRS = []
@@ -81,18 +101,29 @@ rule all_align:
             f"{OUTDIR}/{batch}/{sample}/01.align/grch38/{sample}.srt.bam"
             for batch, sample in VALID_PAIRS
         ],
+
         grch38_bai=[
             f"{OUTDIR}/{batch}/{sample}/01.align/grch38/{sample}.srt.bam.bai"
             for batch, sample in VALID_PAIRS
         ],
-        chm13_bam=[
-            f"{OUTDIR}/{batch}/{sample}/01.align/chm13/{sample}.srt.bam"
-            for batch, sample in VALID_PAIRS
-        ],
-        chm13_bai=[
-            f"{OUTDIR}/{batch}/{sample}/01.align/chm13/{sample}.srt.bam.bai"
-            for batch, sample in VALID_PAIRS
-        ]
+
+        chm13_bam=(
+            []
+            if GRCH38_ONLY
+            else [
+                f"{OUTDIR}/{batch}/{sample}/01.align/chm13/{sample}.srt.bam"
+                for batch, sample in VALID_PAIRS
+            ]
+        ),
+
+        chm13_bai=(
+            []
+            if GRCH38_ONLY
+            else [
+                f"{OUTDIR}/{batch}/{sample}/01.align/chm13/{sample}.srt.bam.bai"
+                for batch, sample in VALID_PAIRS
+            ]
+        )
 
 
 rule minimap2_GRCh38:
